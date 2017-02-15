@@ -27,3 +27,7 @@ entity cmdProc is
 	data: out std_logic_vector(7 downto 0);
 	txNow: out std_logic;
 	txDone: in std_logic;
+ 
+ 
+ 
+ --fish sticks
