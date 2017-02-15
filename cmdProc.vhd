@@ -30,4 +30,3 @@ entity cmdProc is
  
  
  
- --fish sticks
