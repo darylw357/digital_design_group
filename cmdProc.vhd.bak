@@ -19,12 +19,12 @@ entity cmdProc is
 	seqDone: in std_logic;
 	--Ports between cmdProc and Rx
 	done: out std_logic;
-	dataIn: in std_logic_vector(7 downto 0);
+	data: in std_logic_vector(7 downto 0);
 	valid: in std_logic;
 	oe: in std_logic;
 	fe: in std_logic;
 	--Ports between cmdProc and Tx
-	dataOut: out std_logic_vector(7 downto 0);
+	data: out std_logic_vector(7 downto 0);
 	txNow: out std_logic;
 	txDone: in std_logic;
  );
