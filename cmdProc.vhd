@@ -67,7 +67,18 @@ begin
 end;
 
 
+-- Daryl Rx
+architecture cmdProc_Rx of cmdProc is
+	state_type is (S0, S1, S2, S3, S4); --States go here
+	--Signals
+	signal curState, nextState: state_type;
+	
+begin	
 
+ rxStateMachine: process() -- process rxStateMachine sensitivity
+begin
+--process here
+end process; 
 
 
 
