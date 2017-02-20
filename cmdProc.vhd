@@ -71,14 +71,38 @@ end;
 architecture cmdProc_Rx of cmdProc is
 	state_type is (S0, S1, S2, S3, S4); --States go here
 	--Signals
-	signal curState, nextState: state_type;
-	
+	signal curState, nextState: state_type;	
 begin	
 
- rxStateMachine: process() -- process rxStateMachine sensitivity
+
+seq_state: process (CLK, reset) --changes state on clock
 begin
---process here
+  if reset = '0' then
+    curState <= S0;
+  elsif clk'event AND clk='1' then
+    curState <= nextState;
+  end if;
+end process; -- seq
+
+
+rxStateMachine: process(curState) -- process rxStateMachine sensitivity
+begin
+	case curState is
+		when S0 =>
+		--do s0
+		when S1 =>
+		--do s1
+		
+		
 end process; 
+
+combi_out: process(curState)
+ begin
+   Y <= '0'; -- assign default value
+   if curState = S3 then
+     Y <= '1';
+   end if;
+ end process; -- combi_output
 
 
 
