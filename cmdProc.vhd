@@ -11,7 +11,7 @@ entity cmdProc is
   reset: in std_logic;
   --Ports between cmdProc and dataProc
 	START: out std_logic;
-	numWords: out std_logic_vector(11 downto 0);
+	numWords: out std_logic_vector(11 downto 0); --Maybe should be BCD format?
 	dataReady: in std_logic;
 	byte: in std_logic_vector(7 downto 0);
 	maxIndex: in std_logic_vector(11 downto 0);
@@ -21,8 +21,8 @@ entity cmdProc is
 	done: out std_logic;
 	dataIn: in std_logic_vector(7 downto 0);
 	valid: in std_logic;
-	oe: in std_logic;
-	fe: in std_logic;
+	oe: in std_logic; --Error Signal
+	fe: in std_logic; --Erro Signal
 	--Ports between cmdProc and Tx
 	dataOut: out std_logic_vector(7 downto 0);
 	txNow: out std_logic;
@@ -31,11 +31,14 @@ entity cmdProc is
 end;
  
 architecture cmdProc_arch of cmdProc is
-  type state_type is (init, read, send);
+  type state_type is (init, read, beginSend);
   -- Init is the cmd block waitning for the signal, read is reading the data from the rx
-  -- Send is sending the instructions to the data processor
+  -- beginSend is sending the instructions to the data processor (only for one clock cycle)
   signal curState, nextState: state_type;
   --input Signals
+  -- Most of the internal signals can be done on the go
+  --Data signals
+  signal rxCommands: std_logic_vector(11 downto 0); -- Store data from RX in this signal
   
   
 begin
@@ -57,12 +60,19 @@ begin
         nextState <= read;
       end if;
     when read =>
-      if done = '1' then
-        nextState <= send;
-    when send =>
+    when beginSend =>
     end case;
   end process;
-
+  
+  stateOutput: process(curState)
+  begin
+    case curState is
+    when init =>
+    when read =>
+    when beginSend =>
+      start <= '1';
+    end case;
+  end process;
 
 end;
 
