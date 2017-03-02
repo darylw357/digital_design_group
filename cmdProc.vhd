@@ -40,7 +40,6 @@ architecture cmdProc_arch of cmdProc is
   --Data signals
   signal rxCommands: std_logic_vector(11 downto 0); -- Store data from RX in this signal
   
-  
 begin
 
   stateReg: process(clk, reset)
@@ -52,17 +51,6 @@ begin
     end if;
   end process;
   
-  stateOrder: process(curState)
-  begin
-    case curState is
-    when init =>
-      if Valid = '1' then
-        nextState <= read;
-      end if;
-    when read =>
-    when beginSend =>
-    end case;
-  end process;
   
   stateOutput: process(curState)
   begin
@@ -76,10 +64,11 @@ begin
 
 end;
 
+ 
+architecture cmdProc_tx of cmdProc is
 
 
-
-
+end;
 
 
 
