@@ -15,10 +15,10 @@ entity dataProc is
 	maxIndex: out std_logic_vector(11 downto 0);
 	dataResults: out std_logic_vector(55 downto 0);
 	seqDone: out std_logic;
-  --Ports between Data Generator and the Data Processor
-  ctrl_1: out std_logic;
-  ctrl_2: in std_logic;
-  dataIn: in std_logic_vector(7 downto 0)
+	--Ports between Data Generator and the Data Processor
+	ctrl_1: out std_logic;
+	ctrl_2: in std_logic;
+	dataIn: in std_logic_vector(7 downto 0)
  );
 end;
 
@@ -70,7 +70,27 @@ end;
 --When a new byte is ready, crtl_2 TRANSISTIONS in the same way
 architecture dataProc_dataGen of dataProc is
 	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
+
+	
+	
+	
 begin
+	
+	register_data: process(crtl_2)
+	begin
+		if ctrl_2'event then
+			dataReg <= data;
+		end if;
+	end process;
+	
+	count: process(clk) --Need a process to change crtl_1 ennough times to get the correct number of bits, this comes from numWords
+	begin
+	
+	end process;
+	
+	
+	
+	
 	
 end;		
 	
