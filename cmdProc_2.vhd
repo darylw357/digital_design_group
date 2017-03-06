@@ -86,14 +86,17 @@ begin
 	end process; -- seq
 
 
-	rxStateMachine: process(curState) -- process rxStateMachine sensitivity
+	rxStateMachine: process(curState,rxD) -- process rxStateMachine sensitivity
 	begin
 	case curState is
-	when S0 =>
-	--do s0
-	when S1 =>
-	--do s1
-	when others =>
+		when S0 =>
+    if valid = '1';
+		nextState <= S1
+    else nextState <= S0;
+		when S1 =>
+		if rxD = "a"
+		
+	end if;	
 	end case;
 	end process; 
 
