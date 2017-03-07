@@ -40,8 +40,7 @@ architecture dataProc_cmdProc of dataProc is
 	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
 	signal rollingPeakDec: signed(255 downto 0);
 	signal peakIndex : integer; --Index of peak byte
-	signal dataRegBin: std_logic_vector;
-	signal dataRegDec: integer;
+
 
 begin
 
