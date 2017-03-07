@@ -4,7 +4,7 @@ use ieee.numeric_std.all;
 
 --code goes here
 
-entity dataProc is	 
+entity dataProc is
 	port(
 	CLK: in std_logic;
 	reset: in std_logic;
@@ -25,24 +25,25 @@ end;
 
 
 --####### Architecture between command processor and data processor #######--
-architecture dataProc_cmdProc of dataProc is 
+architecture dataProc_cmdProc of dataProc is
 	type state_type is (s0, s1, s2, s3, s4); --States go here
 	--Signals
-	signal curState, nextState: state_type;	
+	signal curState, nextState: state_type;
 	signal numWordsReg: std_logic_vector(11 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer;
-
+	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
+	
 begin
 
 	state_reg: process(clk, reset)
-	begin 
+	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
 			curState <= s0;
 		elsif clk 'event and clk ='1' then --Rising clock edge
 			curState <= nextState;
 		end if;
 	end process;
-	
+
 	state_order: process(curState)
 	begin
 		case curState is -- dummy states
@@ -50,14 +51,14 @@ begin
 			if Start = '1' then
 				nextState <= s1;
 			end if;
-		when s1 => -- Waiting for final data from the data generator(?) 
+		when s1 => -- Waiting for final data from the data generator(?)
 		when s2 => -- fi
 		when s3 =>
 		when s4 =>
 		when others =>
 		end case;
 	end process;
-	
+
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
 		if clk'event and clk ='1' then
@@ -66,13 +67,13 @@ begin
 			end if;
 		end if;
 	end process;
-	
+
 	combinational_output:process(curState)
 	begin
 		dataReady <= '0';
 		seqDone <= '0';
 	end process;
-	
+
 	convert_numWords:process(numWordsReg) --A process to convert numWords to a readable number to get number of bytes
 	begin
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(11 downto 8)));
@@ -80,35 +81,33 @@ begin
 		integerPosistion3 <= to_integer(unsigned(numWordsReg(3 downto 0)));
 		totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
 	end process;
-	
-end;
 
---#######	Architecture between the process and generator	#######--
---This is to request a new byte, the crtl_1 TRANSISTIONS from either 1 to 0 or vice versa.
---When a new byte is ready, crtl_2 TRANSISTIONS in the same way
-architecture dataProc_dataGen of dataProc is
-	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
-	
-	
-	
-	
-begin
-	
+
+
+
+
+	--signals here
+
+
+
+
 	register_data: process(ctrl_2)
 	begin
 		if ctrl_2'event then
 			dataReg <= dataIn;
 		end if;
 	end process;
-	
+
+	global_data_array: process(clk,)
+		if "shift" =
+
 	count: process(clk) --Need a process to change ctrl_1 ennough times to get the correct number of bits, this comes from numWords
 	begin
-	
+
 	end process;
-	
-	
-	
-	
-	
-end;		
-	
+
+
+
+
+
+end;
