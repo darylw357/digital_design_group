@@ -32,9 +32,17 @@ architecture dataProc_cmdProc of dataProc is
 	signal numWordsReg: std_logic_vector(11 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer;
 	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
-	
-begin
+	signal totalIndex : integer; --Index for every byte recieved
+	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 998); --Stores every byte recived
+	--signal rollingPeakHex : CHAR_ARRAY_TYPE(0 to 1); --Peak byte in hex
+	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
+	signal rollingPeakDec: signed(255 downto 0);
+	signal peakIndex : integer; --Index of peak byte
+	signal dataRegBin: std_logic_vector;
+	signal dataRegDec: integer;
 
+begin
+signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
 	state_reg: process(clk, reset)
 	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
@@ -95,19 +103,33 @@ begin
 	begin
 		if ctrl_2'event then
 			dataReg <= dataIn;
+			dataRegBin <= std_logic_vector(unsigned(not(dataReg)) + 1);
+			dataRegDec <= to_integer(dataRegBin);
 		end if;
 	end process;
 
-	global_data_array: process(clk,)
-		if "shift" =
+--global_data_array records all data sent from data gen
 
-	count: process(clk) --Need a process to change ctrl_1 ennough times to get the correct number of bits, this comes from numWords
+	global_data_array: process(clk,transmistting) --Transmitting is a signal that shows when data is being sent from data gen
+	begin
+		if rising_edge(clk) AND "transmitting" = 1 then
+			totalDataArray(totalIndex) <= dataReg;
+		end if;
+	end process;
+
+--detector actually starts comparing values
+	detector: process(clk,totalDataArray,totalIndex)
 	begin
 
 	end process;
 
-
-
+--bin to dec
+	signed_binary_to_decimal: process(clk,rollingPeakBin)
+	begin
+	if rising_edge(clk) and rollingPeakBin'event then
+		rollingPeakDec <= to_integer(rollingPeakBin);
+	end if;
+	end process;
 
 
 end;
