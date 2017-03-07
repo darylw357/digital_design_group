@@ -38,7 +38,7 @@ architecture dataProc_cmdProc of dataProc is
 	signal eighBitIndex : integer; -- Intdex to record every byte (8 bits)
 	signal totalDataArray : array_type; --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
-	--signal rollingPeakDxpression thenec: signed(255 downto 0);
+	signal currentByteValue : signed(7 downto 0) --Current byte in binary
 	signal peakIndex : integer; --Index of peak byte
 
 
@@ -59,8 +59,8 @@ begin
 		when s0 => -- Waiting for the start signal
 			if Start = '1' then
 				nextState <= s1;
-			end if;
-
+			end if;--signal rollingPeakDxpression thenec: signed(255 downto 0);
+--signal rollingPeakDxpression thenec: signed(255 downto 0);
 		when s1 => -- Requesting data from the generator
 			if endRequest = '1' then
 				nextState <= s2;
@@ -126,8 +126,7 @@ begin
 	begin
 		if ctrl_2'event then
 			dataReg <= dataIn;
-			dataRegBin <= std_logic_vector(unsigned(not(dataReg)) + 1);
-			dataRegDec <= to_integer(dataRegBin);
+
 		end if;
 	end process;
 
@@ -144,7 +143,16 @@ begin
 	--detector actually starts comparing values
 	detector: process(clk,totalDataArray,totalIndex)
 	begin
-
+		if rising_edge(clk) then
+			if totalIndex /= '0' then
+				if currentByteValue = rollingPeakBin then
+					--do a thing
+				if currentByteValue > rollingPeakBin then
+					--do another thing
+				if currentByteValue < rollingPeakBin then
+					--do this thing
+				end if; --comparison if
+			end if;
 	end process; --end detector
 
 	--Counters
