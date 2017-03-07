@@ -30,6 +30,7 @@ architecture dataProc_cmdProc of dataProc is
 	--Signals
 	signal curState, nextState: state_type;	
 	signal numWordsReg: std_logic_vector(11 downto 0);
+	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer;
 
 begin
 
@@ -49,8 +50,7 @@ begin
 			if Start = '1' then
 				nextState <= s1;
 			end if;
-		when s1 => -- Waiting for final data from the data generator(?)
-			if 
+		when s1 => -- Waiting for final data from the data generator(?) 
 		when s2 => -- fi
 		when s3 =>
 		when s4 =>
@@ -58,7 +58,7 @@ begin
 		end case;
 	end process;
 	
-	register_numWords:process(start. clk) -- Registers the data from numWords when Start = 1
+	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
 		if clk'event and clk ='1' then
 			if start = '1' then
@@ -69,13 +69,16 @@ begin
 	
 	combinational_output:process(curState)
 	begin
-		dataReady <= '0'
-		seqDone <= '0'
+		dataReady <= '0';
+		seqDone <= '0';
 	end process;
 	
 	convert_numWords:process(numWordsReg) --A process to convert numWords to a readable number to get number of bytes
 	begin
-		
+		integerPosistion1 <= to_integer(unsigned(numWordsReg(11 downto 8)));
+		integerPosistion2 <= to_integer(unsigned(numWordsReg(7 downto 4)));
+		integerPosistion3 <= to_integer(unsigned(numWordsReg(3 downto 0)));
+		totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
 	end process;
 	
 end;
