@@ -27,6 +27,7 @@ end;
 --####### Architecture between command processor and data processor #######--
 architecture dataProc_cmdProc of dataProc is
 	type state_type is (s0, s1, s2, s3, s4); --States go here
+	type array_type is array(0 to 998) of std_logic_vector(7 downto 0);
 	--Signals
 	signal curState, nextState: state_type;
 	signal numWordsReg: std_logic_vector(11 downto 0);
@@ -34,7 +35,7 @@ architecture dataProc_cmdProc of dataProc is
 	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal totalIndex : integer; --Index for every byte recieved
-	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 998); --Stores every byte recived
+	signal totalDataArray : array_type; --Stores every byte recived
 	--signal rollingPeakHex : CHAR_ARRAY_TYPE(0 to 1); --Peak byte in hex
 	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
 	signal rollingPeakDec: signed(255 downto 0);
@@ -43,7 +44,7 @@ architecture dataProc_cmdProc of dataProc is
 	signal dataRegDec: integer;
 
 begin
-	
+
 	state_reg: process(clk, reset)
 	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
@@ -81,10 +82,10 @@ begin
 		beginRequest <= '0';
 		if curState = s1 then
 			beginRequest <= '1';
-		end if;	
-			
+		end if;
+
 	end process;
-	
+
 
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
@@ -132,7 +133,7 @@ begin
 	end process;
 
 
-	
+
 	global_data_array: process(clk,transmistting) --Transmitting is a signal that shows when data is being sent from data gen
 	begin
 		if rising_edge(clk) AND "transmitting" = 1 then
