@@ -1,5 +1,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 --code goes here
 
@@ -44,16 +45,20 @@ begin
 	state_order: process(curState)
 	begin
 		case curState is -- dummy states
-		when s0 =>
-		when s1 =>
-		when s2 =>
+		when s0 => -- Waiting for the start signal
+			if Start = '1' then
+				nextState <= s1;
+			end if;
+		when s1 => -- Waiting for final data from the data generator(?)
+			if 
+		when s2 => -- fi
 		when s3 =>
 		when s4 =>
 		when others =>
 		end case;
 	end process;
 	
-	register_numWords:process(clk) -- Registers the data from numWords when Start = 1
+	register_numWords:process(start. clk) -- Registers the data from numWords when Start = 1
 	begin
 		if clk'event and clk ='1' then
 			if start = '1' then
@@ -61,7 +66,17 @@ begin
 			end if;
 		end if;
 	end process;
-
+	
+	combinational_output:process(curState)
+	begin
+		dataReady <= '0'
+		seqDone <= '0'
+	end process;
+	
+	convert_numWords:process(numWordsReg) --A process to convert numWords to a readable number to get number of bytes
+	begin
+		
+	end process;
 	
 end;
 
@@ -70,20 +85,20 @@ end;
 --When a new byte is ready, crtl_2 TRANSISTIONS in the same way
 architecture dataProc_dataGen of dataProc is
 	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
-
+	
 	
 	
 	
 begin
 	
-	register_data: process(crtl_2)
+	register_data: process(ctrl_2)
 	begin
 		if ctrl_2'event then
-			dataReg <= data;
+			dataReg <= dataIn;
 		end if;
 	end process;
 	
-	count: process(clk) --Need a process to change crtl_1 ennough times to get the correct number of bits, this comes from numWords
+	count: process(clk) --Need a process to change ctrl_1 ennough times to get the correct number of bits, this comes from numWords
 	begin
 	
 	end process;
