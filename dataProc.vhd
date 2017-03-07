@@ -52,16 +52,19 @@ begin
 			if Start = '1' then
 				nextState <= s1;
 			end if;
+
 		when s1 => -- Requesting data from the generator
 			if endRequest = '1' then
 				nextState <= s2;
 			end if;
 		when s2 => -- State for outputing seqDone
 		when s3 => -- State for outputing dataReady
+
 		when s4 =>
 		when others =>
 		end case;
 	end process;
+
 
 	combinational_output:process(curState)
 	begin
@@ -74,6 +77,7 @@ begin
 			
 	end process;
 	
+
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
 		if clk'event and clk ='1' then
@@ -90,6 +94,7 @@ begin
 		integerPosistion3 <= to_integer(unsigned(numWordsReg(3 downto 0)));
 		totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
 	end process;
+
 
 	request_data:process(CLK)
 	variable counter: integer;
@@ -108,8 +113,7 @@ begin
 			end if;
 		end if;
 	end process;
-		
-	
+
 	register_data: process(ctrl_2)
 	begin
 		if ctrl_2'event then
@@ -117,13 +121,11 @@ begin
 		end if;
 	end process;
 
+
 	--global_data_array: process(clk,)
 		--if "shift" =
 
 	
 
-
-
-
-
 end;
+
