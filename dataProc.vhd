@@ -32,14 +32,15 @@ architecture dataProc_cmdProc of dataProc is
 	signal curState, nextState: state_type;
 	signal numWordsReg: std_logic_vector(11 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer;
-	signal dataReg, dataRegBin: std_logic_vector(7 downto 0); -- Store the bytes received
+	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal totalIndex : integer; --Index for every byte recieved
+	signal eighBitIndex : integer; -- Intdex to record every byte (8 bits)
 	signal totalDataArray : array_type; --Stores every byte recived
-	--signal rollingPeakHex : CHAR_ARRAY_TYPE(0 to 1); --Peak byte in hex
-	signal rollingPeakDec: signed(255 downto 0);
+	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
+	--signal rollingPeakDxpression thenec: signed(255 downto 0);
 	signal peakIndex : integer; --Index of peak byte
-	
+
 
 begin
 
@@ -126,25 +127,52 @@ begin
 		if ctrl_2'event then
 			dataReg <= dataIn;
 			dataRegBin <= std_logic_vector(unsigned(not(dataReg)) + 1);
+			dataRegDec <= to_integer(dataRegBin);
 		end if;
 	end process;
 
 
 
-	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
+	global_data_array: process(clk,transmistting) --Transmitting is a signal that shows when data is being sent from data gen
 	begin
-		if rising_edge(clk) AND beginRequest ='1' then
+		if rising_edge(clk) AND "transmitting" = 1 then
 			totalDataArray(totalIndex) <= dataReg;
 		end if;
-	end process;
+	end process; --end data array
 
 
 	--detector actually starts comparing values
 	detector: process(clk,totalDataArray,totalIndex)
 	begin
 
-	end process;
+	end process; --end detector
 
+	--Counters
+	counter: process(clk,reset)
+	begin
+	if reset = '1';
+		totalIndex <= '0';
+		eighBitIndex <= '0'
+	elsif rising_edge(clk) AND<= totalDataArray(peakIndex - '3') dataReg'event then
+		totalIndex <= totalIndex +1; --increment global data index when data is detected.
+	elsif rising_edge(clk) AND dataReg'event AND (totalIndex mod(8)) = '0' then
+		eighBitIndex <= eighBitIndex +1; --increment byte index when 8 bits are detected.
+	end if;
+	end process; --end counters
+
+	--Collects six results and the peak byte.
+	requested_results: process(clk)
+	begin
+	if rising_edge(clk) then
+		dataResults(7 downto 0) <= totalDataArray(peakIndex - '3'); --fix data array stores bits not bytes
+		dataResults(15 downto 7) <= totalDataArray(peakIndex - '2'); --these vector ranges are not quite correct
+		dataResults(23 downto 15) <= totalDataArray(peakIndex - '1');
+		dataResults(31 downto 23) <= totalDataArray(peakIndex);
+		dataResults(39 downto 31) <= totalDataArray(peakIndex + '3');
+		dataResults(47 downto 39) <= totalDataArray(peakIndex + '3');
+		dataResults(56 downto 47) <= totalDataArray(peakIndex + '3');
+	end if;
+	end process; -- end requested_results
 
 
 end;
