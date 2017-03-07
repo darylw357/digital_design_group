@@ -53,13 +53,13 @@ begin
 		end if;
 	end process;
 
-	state_order: process(curState)
+	state_order: process(clk,curState)
 	begin
 		case curState is -- dummy states
 		when s0 => -- Waiting for the start signal
-			if Start = '1' then
+			if start = '1' then
 				nextState <= s1;
-			end if;--signal rollingPeakDxpression thenec: signed(255 downto 0);
+			end if;
 		when s1 => -- Requesting data from the generator
 			if endRequest = '1' then
 				nextState <= s2;
@@ -142,11 +142,12 @@ begin
 		end if;
 	end process;
 	
-	ctrl_2Detection <= ctrl_2Delayed xor ctrlIn;
+
 	
-	register_data: process(ctrlIn)
+	register_data: process(clk, ctrl_2Detection)
 	begin
-		if ctrl_2Detection = '1' then
+		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
+		if ctrl_2Detection = '1' AND rising_edge(clk) then
 			dataReg <= data;
 		end if;
 	end process;
@@ -180,11 +181,12 @@ begin
 	end process; --end detector
 
 	--Counters
-	counter: process(clk,reset)
+	counter: process(clk,reset,dataReg,totalIndex)
 	begin
 		if reset = '1' then
 			totalIndex <= 0;
 			eighBitIndex <= 0;
+			peakIndex <= 0;
 		elsif rising_edge(clk) AND dataReg'event then
 			totalIndex <= totalIndex +1; --increment global data index when data is detected.
 		elsif rising_edge(clk) AND dataReg'event AND (totalIndex mod(8)) = 0 then
@@ -193,7 +195,7 @@ begin
 	end process; --end counters
 
 	--Collects six results and the peak byte.
-	requested_results: process(clk)
+	requested_results: process(clk, reset)
 	begin
 		if rising_edge(clk) and resultsValid = '1' then
 			dataResults(0) <= totalDataArray(peakIndex - 3); --fix data array stores bits not bytes
