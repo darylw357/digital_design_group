@@ -32,6 +32,7 @@ architecture dataProc_cmdProc of dataProc is
 	signal numWordsReg: std_logic_vector(11 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer;
 	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
+	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	
 begin
 
@@ -51,13 +52,31 @@ begin
 			if Start = '1' then
 				nextState <= s1;
 			end if;
-		when s1 => -- Waiting for final data from the data generator(?)
-		when s2 => -- fi
-		when s3 =>
+
+		when s1 => -- Requesting data from the generator
+			if endRequest = '1' then
+				nextState <= s2;
+			end if;
+		when s2 => -- State for outputing seqDone
+		when s3 => -- State for outputing dataReady
+
 		when s4 =>
 		when others =>
 		end case;
 	end process;
+
+
+	combinational_output:process(curState)
+	begin
+		dataReady <= '0';
+		seqDone <= '0';
+		beginRequest <= '0';
+		if curState = s1 then
+			beginRequest <= '1';
+		end if;	
+			
+	end process;
+	
 
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
@@ -66,12 +85,6 @@ begin
 				numWordsReg <= numWords;
 			end if;
 		end if;
-	end process;
-
-	combinational_output:process(curState)
-	begin
-		dataReady <= '0';
-		seqDone <= '0';
 	end process;
 
 	convert_numWords:process(numWordsReg) --A process to convert numWords to a readable number to get number of bytes
@@ -83,13 +96,23 @@ begin
 	end process;
 
 
-
-
-
-	--signals here
-
-
-
+	request_data:process(CLK)
+	variable counter: integer;
+	begin
+		counter:=0;
+		if beginRequest = '1' then
+			if clk'event and clk ='1' then
+				ctrl_1 <= '1';
+				counter := counter + 1;
+			elsif clk'event and clk = '0' then
+				ctrl_1 <= '0';
+				counter := counter + 1;
+			end if;
+			if counter = totalSum then
+				endRequest <= '0';
+			end if;
+		end if;
+	end process;
 
 	register_data: process(ctrl_2)
 	begin
@@ -98,16 +121,11 @@ begin
 		end if;
 	end process;
 
-	global_data_array: process(clk,)
-		if "shift" =
 
-	count: process(clk) --Need a process to change ctrl_1 ennough times to get the correct number of bits, this comes from numWords
-	begin
+	--global_data_array: process(clk,)
+		--if "shift" =
 
-	end process;
-
-
-
-
+	
 
 end;
+
