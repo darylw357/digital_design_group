@@ -6,7 +6,7 @@ use work.common_pack.all;
 --code goes here
 
 entity dataConsume is
-	port(
+	port( 
 		clk:in std_logic;
 		reset: in std_logic; -- synchronous reset
 		start: in std_logic; -- goes high to signal data transfer
@@ -31,6 +31,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal curState, nextState: state_type;
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in numWords
+
 	signal dataReg: std_logic_vector(7 downto 0) := "00000000"; -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal totalIndex : integer; --Index for every byte recieved
@@ -40,7 +41,8 @@ architecture dataConsume_Arch of dataConsume is
 	signal currentByteValue : signed(7 downto 0); --Current byte in binary
 	signal peakIndex: integer; --Index of peak byte
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals
-	signal resultsValid: std_logic;
+
+	signal resultsValid, byteReady: std_logic;
 
 begin
 
@@ -66,8 +68,11 @@ begin
 			end if;
 		when s2 =>
 
-		when s3 =>
-
+			if byteReady = '1' then
+				nextState <= s3;
+			end if;
+		when s3 => 
+			nextState <= s1;
 		when s4 =>
 		when others =>
 		end case;
@@ -82,12 +87,15 @@ begin
 		if curState = s1 then
 			beginRequest <= '1';
 		end if;
-		if curState = s3 then
+
+		if curState = s2 then
 			resultsValid <= '1';
 			seqDone <= '1';
 		end if;
-
-
+		if curState = s3 then
+			dataReady <= '1';
+		end if;
+		
 
 	end process;
 
@@ -101,8 +109,7 @@ begin
 		end if;
 	end process;
 
-
-
+      
 	convert_numWords:process(numWordsReg, reset) --A process to convert numWords to a readable number to get number of bytes
 	begin
 		if reset = '1' then
@@ -112,7 +119,8 @@ begin
 		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
-		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));
+
+		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));	
 	end process;
 
 	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3)
@@ -145,6 +153,7 @@ begin
 		end if;
 	end process;
 
+
 ---------- Processes handling the handshaking protocol
 
 	delay_ctrl_2:process(clk)
@@ -164,10 +173,18 @@ begin
 ----------------------------------------------------------
 
 
+	send_byte:process(dataReg)
+	begin
+		byte <= dataReg;
+		byteReady <= '1';
+	end process;
+	
+
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
 	variable n: integer:=0;
 	begin
 		if rising_edge(clk) AND beginRequest = '1' AND dataReg /= "00000000" then
+
 			totalDataArray(n) <= dataReg;
 			n := n + 1;
 		end if;
@@ -187,7 +204,9 @@ begin
 					--do this thing
 				end if; --comparison if
 			end if;
-		end if;
+
+		end if;	
+
 	end process; --end detector
 
 	--Counters
@@ -220,3 +239,4 @@ begin
 
 
 end;
+
