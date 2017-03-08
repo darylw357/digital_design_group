@@ -6,7 +6,7 @@ use work.common_pack.all;
 --code goes here
 
 entity dataConsume is
-	port( 
+	port(
 		clk:in std_logic;
 		reset: in std_logic; -- synchronous reset
 		start: in std_logic; -- goes high to signal data transfer
@@ -34,7 +34,6 @@ architecture dataConsume_Arch of dataConsume is
 
 	signal dataReg: std_logic_vector(7 downto 0) := "00000000"; -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
-	signal totalIndex : integer; --Index for every byte recieved
 	signal eighBitIndex : integer; -- Intdex to record every byte (8 bits)
 	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 998); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
@@ -70,7 +69,7 @@ begin
 				nextState <= s2;
 			end if;
 		when s2 =>
-		when s3 => 
+		when s3 =>
 			nextState <= s2;
 		when s4 =>
 		when others =>
@@ -92,12 +91,12 @@ begin
 		end if;
 		if curState = s3 then
 		end if;
-		
+
 
 	end process;
 
 ------- Processes handling numWords_BCD  ------------------
-	
+
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
 		if rising_edge(clk) then
@@ -106,7 +105,7 @@ begin
 			end if;
 		end if;
 	end process;
-    
+
 	convert_numWords:process(numWordsReg, reset) --Converting each BCD value into a digit
 	begin
 		if reset = '1' then
@@ -116,7 +115,7 @@ begin
 		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
-		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));	
+		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));
 	end process;
 
 	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3) -- summing the digits to convert from BCD to an integer
@@ -132,7 +131,7 @@ begin
 
 ---------- Processes handling the handshaking protocol  ------------------
 	request_data:process(CLK, reset)
-	
+
 	variable switching: std_logic := '0';
 	begin
 		if reset = '1' then
@@ -168,7 +167,7 @@ begin
 		byte <= dataReg;
 		dataReady <= '1';
 	end process;
---#################################	
+--#################################
 
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
 	variable n: integer:=0;
@@ -177,29 +176,33 @@ begin
 
 			totalDataArray(n) <= dataReg;
 			n := n + 1;
+
 		end if;
 		if n = (totalSum -1) then --When the number of bytes requested is receieved, a signal is sent to move into the next state
 			endRequest <= '1';
 		end if;
-		
+
 	end process; --end data array
 
 
 	--detector actually starts comparing values
-	detector: process(clk,totalDataArray,totalIndex)
+	detector: process(clk,totalDataArray,totalSum)
+	variable g: integer:=0;
+	rollingPeakBin <= totalDataArray(0);
 	begin
 		if rising_edge(clk) then
-			if totalIndex /= 0 then
-				if currentByteValue = rollingPeakBin then
+			if totalSum /= 0 then
+				if totalDataArray(g) = rollingPeakBin then
 					--do a thing
-				elsif currentByteValue > rollingPeakBin then
-					--do another thing
-				elsif currentByteValue < rollingPeakBin then
+				elsif totalDataArray(g) > rollingPeakBin then
+					rollingPeakBin <= totalDataArray(g);
+				elsif totalDataArray(g) < rollingPeakBin then
 					--do this thing
 				end if; --comparison if
+				g := g + 1;
 			end if;
 
-		end if;	
+		end if;
 
 	end process; --end detector
 
