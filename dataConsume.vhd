@@ -57,6 +57,9 @@ begin
 
 	state_order: process(clk,curState)
 	begin
+		if start ='0' then
+			nextState <= s0;
+		end if;
 		case curState is -- dummy states
 		when s0 => -- Waiting for the start signal
 			if start = '1' then
@@ -67,12 +70,8 @@ begin
 				nextState <= s2;
 			end if;
 		when s2 =>
-
-			if byteReady = '1' then
-				nextState <= s3;
-			end if;
 		when s3 => 
-			nextState <= s1;
+			nextState <= s2;
 		when s4 =>
 		when others =>
 		end case;
@@ -87,19 +86,18 @@ begin
 		if curState = s1 then
 			beginRequest <= '1';
 		end if;
-
-		if curState = s2 then
+		if curState = s4 then
 			resultsValid <= '1';
 			seqDone <= '1';
 		end if;
 		if curState = s3 then
-			dataReady <= '1';
 		end if;
 		
 
 	end process;
 
-
+------- Processes handling numWords_BCD  ------------------
+	
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
 		if rising_edge(clk) then
@@ -108,9 +106,8 @@ begin
 			end if;
 		end if;
 	end process;
-
-      
-	convert_numWords:process(numWordsReg, reset) --A process to convert numWords to a readable number to get number of bytes
+    
+	convert_numWords:process(numWordsReg, reset) --Converting each BCD value into a digit
 	begin
 		if reset = '1' then
 		  integerPosistion1 <=0;
@@ -119,11 +116,10 @@ begin
 		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
-
 		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));	
 	end process;
 
-	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3)
+	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3) -- summing the digits to convert from BCD to an integer
 	begin
 		if reset = '1' then
 			totalSum <= 0;
@@ -132,29 +128,23 @@ begin
 		end if;
 	end process;
 
+--------------------------------------------------------------------------
 
+---------- Processes handling the handshaking protocol  ------------------
 	request_data:process(CLK, reset)
-	variable counter: integer := 0;
+	
 	variable switching: std_logic := '0';
 	begin
 		if reset = '1' then
-			counter := 0;
 			switching := '0';
 		end if;
 		if beginRequest = '1' then
 			if rising_edge(clk) then
 				ctrlOut <= switching;
-				counter := counter + 1;
 				switching := not switching;
-			end if;
-			if counter = totalSum then
-				endRequest <= '1';
 			end if;
 		end if;
 	end process;
-
-
----------- Processes handling the handshaking protocol
 
 	delay_ctrl_2:process(clk)
 	begin
@@ -170,15 +160,15 @@ begin
 			dataReg <= data;
 		end if;
 	end process;
-----------------------------------------------------------
+-----------------------------------------------------------------------------
 
-
+--################################ This is lazy and should be fixed (later)
 	send_byte:process(dataReg)
 	begin
 		byte <= dataReg;
-		byteReady <= '1';
+		dataReady <= '1';
 	end process;
-	
+--#################################	
 
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
 	variable n: integer:=0;
@@ -188,6 +178,10 @@ begin
 			totalDataArray(n) <= dataReg;
 			n := n + 1;
 		end if;
+		if n = (totalSum -1) then --When the number of bytes requested is receieved, a signal is sent to move into the next state
+			endRequest <= '1';
+		end if;
+		
 	end process; --end data array
 
 
@@ -239,4 +233,3 @@ begin
 
 
 end;
-
