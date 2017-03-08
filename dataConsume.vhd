@@ -6,9 +6,9 @@ use work.common_pack.all;
 --code goes here
 
 entity dataConsume is
-	port(
-	 clk:		in std_logic;
-		reset:		in std_logic; -- synchronous reset
+	port( 
+		clk:in std_logic;
+		reset: in std_logic; -- synchronous reset
 		start: in std_logic; -- goes high to signal data transfer
 		numWords_bcd: in BCD_ARRAY_TYPE(2 downto 0);
 		ctrlIn: in std_logic;
@@ -19,7 +19,7 @@ entity dataConsume is
 		seqDone: out std_logic;
 		maxIndex: out BCD_ARRAY_TYPE(2 downto 0);
 		dataResults: out CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1) -- index 3 holds the peak
-  );
+	);
 end;
 
 
@@ -82,7 +82,7 @@ begin
 		if curState = s1 then
 			beginRequest <= '1';
 		end if;
-		if curState = s2 then
+		if curState = s3 then
 			resultsValid <= '1';
 			seqDone <= '1';
 		end if;
@@ -109,32 +109,44 @@ begin
 		  integerPosistion1 <=0;
 		  integerPosistion2 <=0;
 		  integerPosistion3 <=0;
-		  totalSum <=0;
 		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
-		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));
-		totalSum <= (integerPosistion3 + (integerPosistion2*10) + (integerPosistion1*100));
+		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));	
 	end process;
-
-
-	request_data:process(CLK)
-	variable counter: integer := 0;
+	
+	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3)
 	begin
+		if reset = '1' then
+			totalSum <= 0;
+		else
+			totalSum <= (integerPosistion3 + (integerPosistion2*10) + (integerPosistion1*100));
+		end if;
+	end process;
+	
+
+	request_data:process(CLK, reset)
+	variable counter: integer := 0;
+	variable switching: std_logic := '0';
+	begin
+		if reset = '1' then
+			counter := 0;
+			switching := '0';
+		end if;
 		if beginRequest = '1' then
 			if rising_edge(clk) then
-				ctrlOut <= '1';
+				ctrlOut <= switching;
 				counter := counter + 1;
-			elsif clk'event and clk = '0' then
-				ctrlOut <= '0';
-				counter := counter + 1;
+				switching := not switching;
 			end if;
 			if counter = totalSum then
-				endRequest <= '0';
+				endRequest <= '1';
 			end if;
 		end if;
 	end process;
 
+---------- Processes handling the handshaking protocol	
+	
 	delay_ctrl_2:process(clk)
 	begin
 		if rising_edge(clk) then
@@ -142,16 +154,14 @@ begin
 		end if;
 	end process;
 	
-
-	
-	register_data: process(clk, ctrl_2Detection)
+	register_data: process(clk)
 	begin
 		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
 		if ctrl_2Detection = '1' AND rising_edge(clk) then
 			dataReg <= data;
 		end if;
 	end process;
-
+----------------------------------------------------------
 
 
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
