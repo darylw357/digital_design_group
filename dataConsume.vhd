@@ -31,16 +31,16 @@ architecture dataConsume_Arch of dataConsume is
 	signal curState, nextState: state_type;
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in numWords
-
-	signal dataReg: std_logic_vector(7 downto 0) := "00000000"; -- Store the bytes received
+	signal N: integer := 0;
+	signal dataReg: signed(7 downto 0) := "00000000"; -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal eighBitIndex : integer; -- Intdex to record every byte (8 bits)
-	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 998); --Stores every byte recived
-	signal rollingPeakBin : signed(7 downto 0); --Peak byte in binary
+	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
+	signal rollingPeakBin : signed(7 downto 0) := "11111111"; --Peak byte in binary
 	signal currentByteValue : signed(7 downto 0); --Current byte in binary
 	signal peakIndex: integer; --Index of peak byte
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals
-
+	signal totalIndex: integer := 0;
 	signal resultsValid, byteReady: std_logic;
 
 begin
@@ -156,7 +156,7 @@ begin
 	begin
 		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
 		if ctrl_2Detection = '1' AND rising_edge(clk) then
-			dataReg <= data;
+			dataReg <= signed(data);
 		end if;
 	end process;
 -----------------------------------------------------------------------------
@@ -164,21 +164,19 @@ begin
 --################################ This is lazy and should be fixed (later)
 	send_byte:process(dataReg)
 	begin
-		byte <= dataReg;
+		byte <= std_logic_vector(dataReg);
 		dataReady <= '1';
 	end process;
 --#################################
 
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
-	variable n: integer:=0;
 	begin
 		if rising_edge(clk) AND beginRequest = '1' AND dataReg /= "00000000" then
-
-			totalDataArray(n) <= dataReg;
-			n := n + 1;
+			totalDataArray(N) <= std_logic_vector(dataReg);
+			N <= N + 1;
 
 		end if;
-		if n = (totalSum -1) then --When the number of bytes requested is receieved, a signal is sent to move into the next state
+		if N = (totalSum -1) then --When the number of bytes requested is receieved, a signal is sent to move into the next state
 			endRequest <= '1';
 		end if;
 
@@ -186,18 +184,13 @@ begin
 
 
 	--detector actually starts comparing values
-	detector: process(clk,totalDataArray,totalSum)
-	variable g: integer:=0;
-	rollingPeakBin <= totalDataArray(0);
+	detector: process(clk,totalDataArray) 	--####### Made some changes that get it started but an undefined value is allocated?
+	variable g: integer:=0;					--####### Should wait till dataReg actually has a value
 	begin
 		if rising_edge(clk) then
 			if totalSum /= 0 then
-				if totalDataArray(g) = rollingPeakBin then
-					--do a thing
-				elsif totalDataArray(g) > rollingPeakBin then
-					rollingPeakBin <= totalDataArray(g);
-				elsif totalDataArray(g) < rollingPeakBin then
-					--do this thing
+				if (totalDataArray(N) < std_logic_vector(rollingPeakBin)) then
+					rollingPeakBin <= signed(totalDataArray(N));
 				end if; --comparison if
 				g := g + 1;
 			end if;
@@ -213,7 +206,7 @@ begin
 			totalIndex <= 0;
 			eighBitIndex <= 0;
 			peakIndex <= 0;
-		elsif rising_edge(clk) AND dataReg'event then
+		elsif rising_edge(clk) AND dataReg'event then --#### Can't use 'event conditions (Alex) ####
 			totalIndex <= totalIndex +1; --increment global data index when data is detected.
 		elsif rising_edge(clk) AND dataReg'event AND (totalIndex mod(8)) = 0 then
 			eighBitIndex <= eighBitIndex +1; --increment byte index when 8 bits are detected.
@@ -228,8 +221,8 @@ begin
 			dataResults(1) <= totalDataArray(peakIndex - 2); --these vector ranges are not quite correct
 			dataResults(2) <= totalDataArray(peakIndex - 1);
 			dataResults(3) <= totalDataArray(peakIndex);
-			dataResults(4) <= totalDataArray(peakIndex + 3);
-			dataResults(5) <= totalDataArray(peakIndex + 3);
+			dataResults(4) <= totalDataArray(peakIndex + 1);
+			dataResults(5) <= totalDataArray(peakIndex + 2);
 			dataResults(6) <= totalDataArray(peakIndex + 3);
 		end if;
 	end process; -- end requested_results
