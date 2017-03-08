@@ -6,7 +6,7 @@ use work.common_pack.all;
 --code goes here
 
 entity dataConsume is
-	port( 
+	port(
 		clk:in std_logic;
 		reset: in std_logic; -- synchronous reset
 		start: in std_logic; -- goes high to signal data transfer
@@ -65,8 +65,8 @@ begin
 				nextState <= s2;
 			end if;
 		when s2 =>
-			
-		when s3 => 
+
+		when s3 =>
 
 		when s4 =>
 		when others =>
@@ -86,8 +86,8 @@ begin
 			resultsValid <= '1';
 			seqDone <= '1';
 		end if;
-		
-		
+
+
 
 	end process;
 
@@ -101,8 +101,8 @@ begin
 		end if;
 	end process;
 
-	
-	
+
+
 	convert_numWords:process(numWordsReg, reset) --A process to convert numWords to a readable number to get number of bytes
 	begin
 		if reset = '1' then
@@ -112,18 +112,18 @@ begin
 		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
-		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));	
+		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));
 	end process;
-	
+
 	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3)
 	begin
 		if reset = '1' then
 			totalSum <= 0;
 		else
-			totalSum <= (integerPosistion3 + (integerPosistion2*10) + (integerPosistion1*100));
+			totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
 		end if;
 	end process;
-	
+
 
 	request_data:process(CLK, reset)
 	variable counter: integer := 0;
@@ -145,15 +145,15 @@ begin
 		end if;
 	end process;
 
----------- Processes handling the handshaking protocol	
-	
+---------- Processes handling the handshaking protocol
+
 	delay_ctrl_2:process(clk)
 	begin
 		if rising_edge(clk) then
 			ctrl_2Delayed <= ctrlIn;
 		end if;
 	end process;
-	
+
 	register_data: process(clk)
 	begin
 		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
@@ -187,7 +187,7 @@ begin
 					--do this thing
 				end if; --comparison if
 			end if;
-		end if;	
+		end if;
 	end process; --end detector
 
 	--Counters
