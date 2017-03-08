@@ -31,7 +31,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal curState, nextState: state_type;
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0);
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in numWords
-	signal dataReg: std_logic_vector(7 downto 0); -- Store the bytes received
+	signal dataReg: std_logic_vector(7 downto 0) := "00000000"; -- Store the bytes received
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal totalIndex : integer; --Index for every byte recieved
 	signal eighBitIndex : integer; -- Intdex to record every byte (8 bits)
@@ -167,7 +167,7 @@ begin
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
 	variable n: integer:=0;
 	begin
-		if rising_edge(clk) AND beginRequest = '1' then
+		if rising_edge(clk) AND beginRequest = '1' AND dataReg /= "00000000" then
 			totalDataArray(n) <= dataReg;
 			n := n + 1;
 		end if;
