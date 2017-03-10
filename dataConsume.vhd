@@ -19,7 +19,7 @@ entity dataConsume is
 		seqDone: out std_logic;
 		maxIndex: out BCD_ARRAY_TYPE(2 downto 0);
 		dataResults: out CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1) -- index 3 holds the peak
-	);
+		);
 end;
 
 
@@ -38,13 +38,15 @@ architecture dataConsume_Arch of dataConsume is
 	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "11111111"; --Peak byte in binary
 	signal currentByteValue : signed(7 downto 0); --Current byte in binary
-	signal peakIndex: integer; --Index of peak byte
+	signal peakIndex: integer; --Index of peak byte ## Just remember that maxIndex is BCD_ARRAY_TYPE ##
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals
 	signal totalIndex: integer := 0;
 	signal resultsValid, byteReady: std_logic;
 
 begin
 
+
+----------- Processes handling the state machine --------------
 	state_reg: process(clk, reset)
 	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
@@ -85,17 +87,16 @@ begin
 		if curState = s1 then
 			beginRequest <= '1';
 		end if;
-		if curState = s4 then
-			resultsValid <= '1';
-			seqDone <= '1';
+		if curState = s2 then
+		  resultsValid <= '1';
 		end if;
 		if curState = s3 then
 		end if;
+  end process;
+  
+---------------------------------------------------------
 
-
-	end process;
-
-------- Processes handling numWords_BCD  ------------------
+-------   Processes handling numWords_BCD  --------------
 
 	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
 	begin
@@ -161,6 +162,8 @@ begin
 	end process;
 -----------------------------------------------------------------------------
 
+----------------  Storing data processes ------------------------------------
+
 --################################ This is lazy and should be fixed (later)
 	send_byte:process(dataReg)
 	begin
@@ -171,10 +174,9 @@ begin
 
 	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
 	begin
-		if rising_edge(clk) AND beginRequest = '1' AND dataReg /= "00000000" then
+		if rising_edge(clk) AND beginRequest = '1' AND dataReg /= "00000000" then -- Not sure about the last condition because the register can be "00000000"
 			totalDataArray(N) <= std_logic_vector(dataReg);
 			N <= N + 1;
-
 		end if;
 		if N = (totalSum -1) then --When the number of bytes requested is receieved, a signal is sent to move into the next state
 			endRequest <= '1';
@@ -182,44 +184,48 @@ begin
 
 	end process; --end data array
 
-
+-------------------------------------------------------------------------------
+	
 	--detector actually starts comparing values
-	detector: process(clk,totalDataArray) 	--####### Made some changes that get it started but an undefined value is allocated?
-	variable g: integer:=0;					--####### Should wait till dataReg actually has a value
+	detector: process(clk,totalDataArray, reset) 						
+	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
-		if rising_edge(clk) then
-			if totalSum /= 0 then
-				if (totalDataArray(N) < std_logic_vector(rollingPeakBin)) then
-					rollingPeakBin <= signed(totalDataArray(N));
+		if reset ='1' then
+			peakIndex <= 0;
+			valueFromArray := "11111111"; -- Smallest negative number
+			rollingPeakBin <= "11111111";
+		end if;
+		if rising_edge(clk) and N > 0 then
+				valueFromArray := totalDataArray(N-1); --Stores the the data bit in a variable which can be converted to signed
+				if signed(valueFromArray) >=(rollingPeakBin) then --Compares the saved variable to the current peak value
+					rollingPeakBin <= signed(totalDataArray(N-1));
+					peakIndex <= N-1; --Set the index number of the peak value
 				end if; --comparison if
-				g := g + 1;
-			end if;
-
 		end if;
 
 	end process; --end detector
 
-	--Counters
-	counter: process(clk,reset,dataReg,totalIndex)
-	begin
-		if reset = '1' then
-			totalIndex <= 0;
-			eighBitIndex <= 0;
-			peakIndex <= 0;
-		elsif rising_edge(clk) AND dataReg'event then --#### Can't use 'event conditions (Alex) ####
-			totalIndex <= totalIndex +1; --increment global data index when data is detected.
-		elsif rising_edge(clk) AND dataReg'event AND (totalIndex mod(8)) = 0 then
-			eighBitIndex <= eighBitIndex +1; --increment byte index when 8 bits are detected.
-		end if;
-	end process; --end counters
+	--Counters                                                 ###################################
+	-- counter: process(clk,reset,dataReg,totalIndex)          ### Do we even need this block? ###
+	-- begin                                                   ###################################
+		-- if reset = '1' then
+			-- totalIndex <= 0;
+			-- eighBitIndex <= 0;
+			-- peakIndex <= 0;
+		-- elsif rising_edge(clk) AND dataReg'event then --#### Can't use 'event conditions (Alex) ####
+			-- totalIndex <= totalIndex +1; --increment global data index when data is detected.
+		-- elsif rising_edge(clk) AND dataReg'event AND (totalIndex mod(8)) = 0 then
+			-- eighBitIndex <= eighBitIndex +1; --increment byte index when 8 bits are detected.
+		-- end if;
+	-- end process; --end counters
 
 	--Collects six results and the peak byte.
-	requested_results: process(clk, reset)
+	requested_results: process(reset, resultsValid)
 	begin
-		if rising_edge(clk) and resultsValid = '1' then
+		if resultsValid = '1' then
 			dataResults(0) <= totalDataArray(peakIndex - 3); --fix data array stores bits not bytes
 			dataResults(1) <= totalDataArray(peakIndex - 2); --these vector ranges are not quite correct
-			dataResults(2) <= totalDataArray(peakIndex - 1);
+			dataResults(2) <= totalDataArray(peakIndex - 1); --the peak index will be in BCD format so not sure how correct this will be (Alex)
 			dataResults(3) <= totalDataArray(peakIndex);
 			dataResults(4) <= totalDataArray(peakIndex + 1);
 			dataResults(5) <= totalDataArray(peakIndex + 2);
