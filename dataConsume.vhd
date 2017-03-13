@@ -276,19 +276,83 @@ begin
 	
 	
 	--Collects six results and the peak byte.
-	requested_results: process(reset, resultsValid)
+	requested_results: process(reset, resultsValid,)--the peak index will be in BCD format so not sure how correct this will be (Alex)
 	begin
 		if resultsValid = '1' then
-			if peakIndex > 2 and peakIndex < totalSum - 4 then
-				dataResults(0) <= totalDataArray(peakIndex - 3); 
-				dataResults(1) <= totalDataArray(peakIndex - 2); 
-				dataResults(2) <= totalDataArray(peakIndex - 1); 
-				dataResults(3) <= totalDataArray(peakIndex);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-				dataResults(6) <= totalDataArray(peakIndex + 3); -- ## Make a case if the peak index is less than 3 or something
-			end if;	
-		end if;
+						dataResults(0) <= 0;
+						dataResults(1) <= 0;
+						dataResults(2) <= 0;
+						dataResults(3) <= 0;
+						dataResults(4) <= 0;
+						dataResults(5) <= 0;
+						dataResults(6) <= 0;
+					--Perfect Case at least 7 bytes
+					if peakIndex > 2 and peakIndex < totalSum - 4 then
+						dataResults(0) <= totalDataArray(peakIndex - 3);
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+						dataResults(5) <= totalDataArray(peakIndex + 2);
+						dataResults(6) <= totalDataArray(peakIndex + 3);
+
+					elsif peakIndex > 2 and peakIndex < totalSum - 3 then
+						dataResults(0) <= totalDataArray(peakIndex - 3);
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+						dataResults(5) <= totalDataArray(peakIndex + 2);
+
+					elsif peakIndex > 2 and peakIndex < totalSum - 2 then
+						dataResults(0) <= totalDataArray(peakIndex - 3);
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+
+					elsif peakIndex > 2 and peakIndex < totalSum - 1 then
+						dataResults(0) <= totalDataArray(peakIndex - 3);
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+	
+
+					elsif peakIndex > 1 and peakIndex < totalSum - 3 then
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+						dataResults(5) <= totalDataArray(peakIndex + 2);
+
+					elsif peakIndex > 1 and peakIndex < totalSum - 2 then
+						dataResults(1) <= totalDataArray(peakIndex - 2);
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+
+
+					elsif peakIndex = 1  and peakIndex < totalSum - 3 then
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+						dataResults(5) <= totalDataArray(peakIndex + 2);
+
+					elsif peakIndex = 1 and peakIndex < totalSum - 2 then
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+						dataResults(4) <= totalDataArray(peakIndex + 1);
+
+					elsif peakIndex = 1 and peakIndex < totalSum - 1 then
+						dataResults(2) <= totalDataArray(peakIndex - 1);
+						dataResults(3) <= totalDataArray(peakIndex);
+
+					elsif peakIndex = 0 and peakIndex = totalSum  then
+						dataResults(3) <= totalDataArray(peakIndex);
+
+					end if;
+
+			end if;
 	end process; -- end requested_results
   
 
