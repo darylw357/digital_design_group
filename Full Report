@@ -1,1 +1,42 @@
-VHDL Project report
+--Digital Design VHDL Project report
+
+--Introduction
+
+The aim of this project was to create a peak dectector that when fed a series of hexadecimal data values
+the peak value was indentied along with the proceeding and previous 3 values. This detector is run on a Xilinx X5 FPGA development
+board and communications between the board and desktop computer is handled via the UART RS-232 protocol. Along with the main feature of peak
+detection, the system had to respond to certain input commands and produce results as requested. These features are detailed below.
+
+--Group
+
+As group 17 Our four person group consisted of Daryl White, Alexander Hamilton, Sylvia Betrosian and Adreas Michaelides. We met initally
+to discuss the project and split up into pairs for work on the Data processor and command processor. Daryl White and Alexander Hamilton
+designed and built the Data Processor and Sylvia Betrosian and Adreas Michaelides designed and built the Command Procssor.
+
+
+--Plan
+
+A large part of this assignment was learning to break down large portions of the project into smaller tasks that could be allocated to each
+group memember and the experience of coordinating work efforts so that each component integrated correctly once the final system was built.
+
+Our group decided to meet every two weeks to discuss progress and problems and, before the interim deadline, test the interaction of the
+data processor and command processor.
+
+Within each two person team a gnatt chart was drawn up to plan when each segment of the respective processor should be completed by.
+
+Gnatt Chart and key milestone dates.
+
+The key milestones for this project were the interim assignment deadline on Friday 24th March and the final synthesised deadline on 28th April and the presentation date of 
+
+
+--Data Processor
+
+state machine diagram for FSM
+block diagram of system
+use of github
+
+--Command Processor
+
+Group to add their discussion here.
+
+--Conclusion
