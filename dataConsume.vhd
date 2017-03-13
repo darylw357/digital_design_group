@@ -189,14 +189,14 @@ begin
 		if resetN = '1'then
 		    N <= 0;
 		end if;
-		if beginRequest = '1' then -- Not sure about the last condition because the register can be "00000000"
+		if beginRequest = '1' and endRequest <= '0' then -- Not sure about the last condition because the register can be "00000000"
 			ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
 			if ctrl_2Detection = '1' AND rising_edge(clk) then
 				totalDataArray(N) <= data;
 				N <= N + 1;
 				dataArrived <= '1';
 			end if;
-			if N > (totalSum-1) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
+			if N >= (totalSum-1) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
 			   endRequest <= '1';
 			end if;
 		end if;
@@ -207,10 +207,10 @@ begin
 -------------------------------------------------------------------------------
 	
 	--detector actually starts comparing values
-	detector: process(clk,totalDataArray, reset) 						
+	detector: process(clk,totalDataArray, reset, resetN) 						
 	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
-		if reset ='1' then
+		if reset ='1' or resetN = '1' then
 			peakIndex <= 0;
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001";
@@ -275,84 +275,83 @@ begin
 	end process;
 	
 	
-	--Collects six results and the peak byte.
-	requested_results: process(reset, resultsValid,)--the peak index will be in BCD format so not sure how correct this will be (Alex)
+	requested_results: process(reset, resultsValid)--the peak index will be in BCD format so not sure how correct this will be (Alex)
 	begin
 		if resultsValid = '1' then
-						dataResults(0) <= 0;
-						dataResults(1) <= 0;
-						dataResults(2) <= 0;
-						dataResults(3) <= 0;
-						dataResults(4) <= 0;
-						dataResults(5) <= 0;
-						dataResults(6) <= 0;
-					--Perfect Case at least 7 bytes
-					if peakIndex > 2 and peakIndex < totalSum - 4 then
-						dataResults(0) <= totalDataArray(peakIndex - 3);
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
-						dataResults(5) <= totalDataArray(peakIndex + 2);
-						dataResults(6) <= totalDataArray(peakIndex + 3);
+			dataResults(0) <= "00000000";
+			dataResults(1) <= "00000000";
+			dataResults(2) <= "00000000";
+			dataResults(3) <= "00000000";
+			dataResults(4) <= "00000000";
+			dataResults(5) <= "00000000";
+			dataResults(6) <= "00000000";
+			--Perfect Case at least 7 bytes
+			if peakIndex > 2 and peakIndex < totalSum - 4 then
+				dataResults(0) <= totalDataArray(peakIndex - 3);
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+				dataResults(5) <= totalDataArray(peakIndex + 2);
+				dataResults(6) <= totalDataArray(peakIndex + 3);
 
-					elsif peakIndex > 2 and peakIndex < totalSum - 3 then
-						dataResults(0) <= totalDataArray(peakIndex - 3);
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
-						dataResults(5) <= totalDataArray(peakIndex + 2);
+			elsif peakIndex > 2 and peakIndex < totalSum - 3 then
+				dataResults(0) <= totalDataArray(peakIndex - 3);
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+				dataResults(5) <= totalDataArray(peakIndex + 2);
 
-					elsif peakIndex > 2 and peakIndex < totalSum - 2 then
-						dataResults(0) <= totalDataArray(peakIndex - 3);
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
+			elsif peakIndex > 2 and peakIndex < totalSum - 2 then
+				dataResults(0) <= totalDataArray(peakIndex - 3);
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
 
-					elsif peakIndex > 2 and peakIndex < totalSum - 1 then
-						dataResults(0) <= totalDataArray(peakIndex - 3);
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-	
-
-					elsif peakIndex > 1 and peakIndex < totalSum - 3 then
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
-						dataResults(5) <= totalDataArray(peakIndex + 2);
-
-					elsif peakIndex > 1 and peakIndex < totalSum - 2 then
-						dataResults(1) <= totalDataArray(peakIndex - 2);
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
+			elsif peakIndex > 2 and peakIndex < totalSum - 1 then
+				dataResults(0) <= totalDataArray(peakIndex - 3);
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
 
 
-					elsif peakIndex = 1  and peakIndex < totalSum - 3 then
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
-						dataResults(5) <= totalDataArray(peakIndex + 2);
+			elsif peakIndex > 1 and peakIndex < totalSum - 3 then
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+				dataResults(5) <= totalDataArray(peakIndex + 2);
 
-					elsif peakIndex = 1 and peakIndex < totalSum - 2 then
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
-						dataResults(4) <= totalDataArray(peakIndex + 1);
+			elsif peakIndex > 1 and peakIndex < totalSum - 2 then
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
 
-					elsif peakIndex = 1 and peakIndex < totalSum - 1 then
-						dataResults(2) <= totalDataArray(peakIndex - 1);
-						dataResults(3) <= totalDataArray(peakIndex);
 
-					elsif peakIndex = 0 and peakIndex = totalSum  then
-						dataResults(3) <= totalDataArray(peakIndex);
+			elsif peakIndex = 1  and peakIndex < totalSum - 3 then
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+				dataResults(5) <= totalDataArray(peakIndex + 2);
 
-					end if;
+			elsif peakIndex = 1 and peakIndex < totalSum - 2 then
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+
+			elsif peakIndex = 1 and peakIndex < totalSum - 1 then
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+
+			elsif peakIndex = 0 and peakIndex = totalSum  then
+				dataResults(3) <= totalDataArray(peakIndex);
 
 			end if;
+
+		end if;
 	end process; -- end requested_results
   
 
