@@ -226,23 +226,23 @@ begin
 		if resultsValid = '1' then
 			if rising_edge(clk) then
 				if flag1 = '0' then
-					if (counter100*100) > to_unsigned(peakIndex, 8) then
+					if (to_integer(counter100)*100) > peakIndex then
 						maxIndex(2) <= std_logic_vector(counter100 - 1);
 						flag1:='1';
 					else
 						counter100 := (counter100 + 1);
 					end if;
 				end if;
-				if flag2 = '1' then
-					if (10*counter10) > (to_unsigned(peakIndex,8) - (100*(counter100-1))) then
+				if flag2 = '0' and flag1 = '1' then
+					if (to_integer(counter10)*10) > (peakIndex - (100*to_integer(counter100-1))) then
 						maxIndex(1) <= std_logic_vector(counter10 - 1);
 						flag2 :='1';
 					else
 						counter10 := (counter10 + 1);
 					end if;
 				end if;
-				if flag3 = '1' then
-					if counter1 > (to_unsigned(peakIndex,8) - (100*(counter100-1)) - (10*(counter10 -1))) then
+				if flag3 = '0' and flag2 = '1' then
+					if to_integer(counter1) > (peakIndex - (100*to_integer(counter100-1)) - (10*to_integer(counter10-1))) then
 						maxIndex(0) <= std_logic_vector(counter1 - 1);
 						flag3 := '1';
 					else
