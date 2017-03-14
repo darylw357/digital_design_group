@@ -25,14 +25,13 @@ end;
 
 --####### Architecture between command processor and data processor #######--
 architecture dataConsume_Arch of dataConsume is
-	type state_type is (s0, s1, s2, s3, s4,s5); --States go here
-	--type array_type is array(0 to 998) of std_logic_vector(7 downto 0);
+	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak); --States go here
 	--Signals
-	signal curState, nextState: state_type;
-	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0);
+	signal curState, nextState: state_type; -- Used for moving through the state machine
+	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0); --Stores numWords in a register
 	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in numWords
 	signal N: integer := 0; --Controls the allocation of the data into the array
-	signal resetN: std_logic; -- resets N back to zero when in s0;
+	signal resetN: std_logic; -- resets N back to zero when in init;
 	signal beginRequest, endRequest: std_logic; --Tell the processor to stop and start requesting data from the generator
 	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in binary
@@ -49,7 +48,7 @@ begin
 	state_reg: process(clk, reset)
 	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
-			curState <= s0;
+			curState <= init;
 		elsif clk 'event and clk ='1' then --Rising clock edge
 			curState <= nextState;
 		end if;
@@ -57,30 +56,28 @@ begin
 
 	state_order: process(clk,curState)
 	begin
-		if start ='0' then --Start must always be asserted for the data processor to run
-			nextState <= s0;
+		if start ='0' then 				--Start must always be asserted for the data processor to run
+			nextState <= init;
 		end if;
-		case curState is -- dummy states
-		when s0 => -- Waiting for the start signal
+		case curState is
+		when init => 					-- Waiting for the start signal
 			if start = '1' then
-				nextState <= s1;
+				nextState <= dataRequest;
 			end if;
-		when s1 => -- Requesting data from the generator
+		when dataRequest => 			-- Requesting data from the generator
 			if dataArrived = '1' then
-				nextState <= s2;
+				nextState <= sendBytes;
 			end if;
-		when s2 =>
+		when sendBytes => 				--Start sending the bytes from the global array
 			if endRequest = '1' then
-				nextState <= s3;
+				nextState <= assignPeak;
 			end if;
-		when s3 =>
-			nextState <= s4;
-		when s4 =>
-			if conversionComplete = '1' then
-				nextState <= s5;
+		when assignPeak =>				 		-- Find the peak value and assign it and the 3 bytes before and after into dataResults. 
+			if conversionComplete = '1' then	--Also the assigning of maxIndex occurs in this state
+				nextState <= sendPeak;
 			end if;
-		when s5 =>
-			nextState <= s0;
+		when sendPeak =>						-- Sends dataResults, and maxIndex and resets many of the signals in the machine
+			nextState <= init;
 		when others =>
 		end case;
 	end process;
@@ -93,17 +90,17 @@ begin
 		beginRequest <= '0';
 		resultsValid <= '0';
 		resetN <= '0';
-		if curState = s1 then
+		if curState = dataRequest then
 			beginRequest <= '1';
 		end if;
-		if curState = s2 then
+		if curState = sendBytes then
 			dataReady <= '1';
 			beginRequest <= '1';
 		end if;
-		if curState = s4 then
+		if curState = assignPeak then
 			resultsValid <= '1';
 		end if;
-		if curState = s5 then
+		if curState = sendPeak then
 			seqDone <= '1';
 			resetN <= '1';
 		end if;
@@ -146,18 +143,22 @@ begin
 --------------------------------------------------------------------------
 
 ---------- Processes handling the handshaking protocol  ------------------
-	request_data:process(CLK, reset)
-
-	variable switching: std_logic := '0'; --#################################################################################
-	begin                                 --#################################################################################
+	request_data:process(CLK, reset, resetN)
+	variable switching: std_logic := '0'; 
+	variable switchCounter: integer := 0;
+	begin                                
 		if reset = '1' then
 			switching := '0';
+			switchCounter := 0;
 		end if;
-		if beginRequest = '1' then
+		if resetN = '1' then
+			switchCounter := 0;
+		end if;
+		if beginRequest = '1' and (switchCounter <= totalSum) then
 			if rising_edge(clk) then
 				ctrlOut <= switching;
 				switching := not switching;
-
+				switchCounter := switchCounter + 1;
 			end if;
 		end if;
 	end process;
@@ -234,7 +235,7 @@ begin
 	variable flag3: std_logic:= '0';
 	begin
 		conversionComplete <= '0';
-		if reset ='1' then
+		if reset ='1' or resetN ='1' then
 			counter100:= "0000";
 			counter10:= "0000";
 			counter1:= "0000";
