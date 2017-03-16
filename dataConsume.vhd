@@ -37,7 +37,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in binary
 	signal peakIndex: integer; --Index of peak byte ## Just remember that maxIndex is BCD_ARRAY_TYPE ##
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals
-	signal resultsValid, byteReady: std_logic;
+	signal resultsValid, byteReady: std_logic; --ByteReady is not used*
 	signal dataArrived: std_logic; -- Check that data has started to be allocated into the global array
 	signal conversionComplete: std_logic; --Check that peakIndex has been converted into a bcd format
 
@@ -151,7 +151,7 @@ begin
 			switching := '0';
 			switchCounter := 0;
 		end if;
-		if resetN = '1' then
+		if resetN = '1' and rising_edge(CLK) then
 			switchCounter := 0;
 		end if;
 		if beginRequest = '1' and (switchCounter <= totalSum) then
@@ -187,7 +187,7 @@ begin
 	begin
 		dataArrived <= '0';
 		endRequest <= '0';
-		if resetN = '1'then
+		if resetN = '1' and rising_edge(clk) then
 		    N <= 0;
 		end if;
 		if beginRequest = '1' and endRequest <= '0' then -- Not sure about the last condition because the register can be "00000000"
@@ -216,12 +216,19 @@ begin
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001";
 		end if;
-		if rising_edge(clk) and N > 0 then
-			valueFromArray := totalDataArray(N-1); --Stores the the data bit in a variable which can be converted to signed
-			if signed(valueFromArray) >=(rollingPeakBin) then --Compares the saved variable to the current peak value
-				rollingPeakBin <= signed(totalDataArray(N-1));
-				peakIndex <= N-1; --Set the index number of the peak value
-			end if; --comparison if
+		if rising_edge(clk) then
+			if resetN = '1' then
+			   peakIndex <= 0;
+			   valueFromArray := "10000001"; -- largest negative number
+			   rollingPeakBin <= "10000001";
+			end if;  
+			if N > 0 then
+				valueFromArray := totalDataArray(N-1); --Stores the the data bit in a variable which can be converted to signed
+				if signed(valueFromArray) >=(rollingPeakBin) then --Compares the saved variable to the current peak value
+					rollingPeakBin <= signed(totalDataArray(N-1));
+					peakIndex <= N-1; --Set the index number of the peak value
+				end if; --comparison if
+			end if;
 		end if;
 
 	end process; --end detector
