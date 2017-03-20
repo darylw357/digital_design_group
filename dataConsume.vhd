@@ -154,7 +154,7 @@ begin
 		if resetN = '1' and rising_edge(CLK) then
 			switchCounter := 0;
 		end if;
-		if rising_edge(clk) then then
+		if rising_edge(clk) then
 			if beginRequest = '1' and (switchCounter <= totalSum)  then
 				ctrlOut <= switching;
 				switching := not switching;
