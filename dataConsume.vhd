@@ -37,7 +37,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in binary
 	signal peakIndex: integer; --Index of peak byte ## Just remember that maxIndex is BCD_ARRAY_TYPE ##
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals
-	signal resultsValid, byteReady: std_logic; --ByteReady is not used*
+	signal resultsValid: std_logic; 
 	signal dataArrived: std_logic; -- Check that data has started to be allocated into the global array
 	signal conversionComplete: std_logic; --Check that peakIndex has been converted into a bcd format
 
@@ -104,7 +104,7 @@ begin
 			seqDone <= '1';
 			resetN <= '1';
 		end if;
-  end process;
+	end process;
   
 ---------------------------------------------------------
 
@@ -144,18 +144,19 @@ begin
 
 ---------- Processes handling the handshaking protocol  ------------------
 	request_data:process(CLK, reset, resetN)
-	variable switching: std_logic := '0'; 
-	variable switchCounter: integer := 0;
+	variable switching: std_logic; 
+	variable switchCounter: integer := 0; -- switchCounter counts the number of times that ctrlOut has switched and therefore the number of bits requested
 	begin                                
 		if reset = '1' then
 			switching := '0';
 			switchCounter := 0;
 		end if;
-		if resetN = '1' and rising_edge(CLK) then
-			switchCounter := 0;
-		end if;
 		if rising_edge(clk) then
-			if beginRequest = '1' and (switchCounter <= totalSum)  then
+			if resetN = '1' then
+			   switchCounter := 0;
+			end if;
+			if switchCounter > totalSum  then
+			elsif beginRequest = '1'then
 				ctrlOut <= switching;
 				switching := not switching;
 				switchCounter := switchCounter + 1;
@@ -163,7 +164,7 @@ begin
 		end if;
 	end process;
 
-	delay_ctrl_2:process(clk)
+	delay_ctrl_2:process(clk) -- A register storing the delayed value of the ctrlIn signal
 	begin
 		if rising_edge(clk) then
 			ctrl_2Delayed <= ctrlIn;
@@ -183,35 +184,36 @@ begin
 	end process; 
 --#################################
   
-	global_data_array: process(clk,beginRequest) --Transmitting is a signal that shows when data is being sent from data gen
+	global_data_array: process(clk, beginRequest, resetN) --Transmitting is a signal that shows when data is being sent from data gen
 	begin
 		dataArrived <= '0';
 		endRequest <= '0';
 		if resetN = '1' and rising_edge(clk) then
 		    N <= 0;
 		end if;
-		if beginRequest = '1' and endRequest <= '0' then -- Not sure about the last condition because the register can be "00000000"
-			ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
-			if ctrl_2Detection = '1' AND rising_edge(clk) then
-				totalDataArray(N) <= data;
-				N <= N + 1;
-				dataArrived <= '1';
+		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed;
+		if rising_edge(clk) then
+			if N >= (totalSum) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
+					endRequest <= '1';
+			end if;	
+			if beginRequest = '1' and endRequest = '0' then
+				if ctrl_2Detection = '1' then
+					totalDataArray(N) <= data;
+					N <= N + 1;
+					dataArrived <= '1';
+				end if;
 			end if;
-			if N >= (totalSum-1) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
-			   endRequest <= '1';
-			end if;
+			
 		end if;
-		
-
 	end process; --end data array
 
 -------------------------------------------------------------------------------
 	
 	--detector actually starts comparing values
-	detector: process(clk,totalDataArray, reset, resetN) 						
+	detector: process(clk, reset, resetN, beginRequest) 						
 	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
-		if reset ='1' or resetN = '1' then
+		if reset ='1' then
 			peakIndex <= 0;
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001";
@@ -222,7 +224,7 @@ begin
 			   valueFromArray := "10000001"; -- largest negative number
 			   rollingPeakBin <= "10000001";
 			end if;  
-			if N > 0 then
+			if N > 0 and beginRequest = '1' then
 				valueFromArray := totalDataArray(N-1); --Stores the the data bit in a variable which can be converted to signed
 				if signed(valueFromArray) >=(rollingPeakBin) then --Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(totalDataArray(N-1));
