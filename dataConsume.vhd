@@ -25,7 +25,7 @@ end;
 
 --####### Architecture between command processor and data processor #######--
 architecture dataConsume_Arch of dataConsume is
-	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, s1, s2); --States go here
+	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, dataRequestSwitch, sendBytesSwitch); --States go here
 	--Signals
 	signal curState, nextState: state_type; -- Used for state machine control
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0); --Stores numWords in a register
@@ -59,6 +59,8 @@ begin
 			curState <= init;
 		elsif rising_edge(clk) then --Rising clock edge
 			curState <= nextState;
+		else
+		   null;
 		end if;
 	end process;
 
@@ -71,14 +73,18 @@ begin
 		when init => 					-- Waiting for the start signal
 			if start = '1' then
 				nextState <= dataRequest;
+			else
+				nextState <= init;
 			end if;
 		when dataRequest => 			-- Requesting data from the generator
 			if dataArrived = '1' then
-				nextState <= s2;
+				nextState <= sendBytesSwitch;
 			elsif switch ='1' then
-				nextState <= s1;
+				nextState <= dataRequestSwitch;
+			else
+				nextState <= dataRequest;
 			end if;
-		when s1 =>
+		when dataRequestSwitch =>
 			if switch = '1' then
 				if dataArrived = '1' then
 				  nextState <= sendBytes;
@@ -90,17 +96,23 @@ begin
 			if endRequest = '1' then
 				nextState <= assignPeak;
 			elsif switch ='1' then
-				nextState <= s2;
+				nextState <= sendBytesSwitch;
+			else
+				nextState <= sendBytes;
 			end if;
-		when s2 =>
-		  if switch = '1' then
-		    nextState <= sendBytes;
-		  elsif endRequest = '1' then
-		    nextState <= assignPeak;
-		  end if;
+		when sendBytesSwitch =>
+			if switch = '1' then
+				nextState <= sendBytes;
+			elsif endRequest = '1' then
+				nextState <= assignPeak;
+			else
+				nextState <= sendBytesSwitch;
+			end if;
 		when assignPeak =>				 		-- Find the peak value and assign it and the 3 bytes before and after into dataResults. 
 			if conversionComplete = '1' then	--Also the assigning of maxIndex occurs in this state
 				nextState <= sendPeak;
+			else
+				nextState <= assignPeak;
 			end if;
 		when sendPeak =>						-- Sends dataResults, and maxIndex and resets many of the signals in the machine
 			nextState <= init;
@@ -127,12 +139,12 @@ begin
 			beginRequest <= '1';
 			countEn <= '1';
 		end if;
-		if curState = s1 then
+		if curState = dataRequestSwitch then
 		  beginRequest <= '1';
 		  countEn <= '1';
 		  toggle <= '1';
 		end if; 
-		if curState = s2 then
+		if curState = sendBytesSwitch then
 		  beginRequest <='1';
 		  dataReady <= '1';
 		  countEn <= '1';
@@ -217,8 +229,9 @@ begin
 			switch <= '0';
 		end if;
 		if resetN = '1' then
-		elsif countInt >= (totalSum-1) then
-			 switch <= '0';
+			switch <= '0';
+		elsif countInt >= (totalSum) then
+			switch <= '0';
 		elsif beginRequest = '1' and countInt < totalSum then
 			switch <= '1';
 		end if;
@@ -270,25 +283,22 @@ begin
 		if N >= totalSum and N > 0 then
 			endRequest <= '1';
 		elsif beginRequest = '1' and ctrl_2Detection = '1' then
-			totalDataArray(N) <= data;
 			dataArrived <= '1';
 		else
-		  totalDataArray(N) <= "00000000";
+		  NULL;
 		end if;
-		
-		
-		-- if rising_edge(clk) then
-			-- if beginRequest = '1' and endRequest = '0' then
-				-- if N >= (totalSum) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
-					-- endRequest <= '1';
-				-- elsif ctrl_2Detection = '1' then
-					-- totalDataArray(N) <= data;
-					-- dataArrived <= '1';
-				-- end if;
-			-- end if;
-		-- end if;
 	end process; --end data array
-
+	
+	global_data_allocation:process(clk, reset, ctrl_2Detection, data)
+	begin 
+		if reset = '1' then
+			totalDataArray(N) <= "00000000";
+		elsif rising_edge(clk) and ctrl_2Detection = '1' then
+			totalDataArray(N) <= data;
+		else
+			null;
+		end if;
+	end process;
 -------------------------------------------------------------------------------
 	
 ------------	Processes for finding the converting peak values --------------
@@ -353,73 +363,53 @@ begin
 		if resultsValid = '1' then
 			if 100*to_integer(count100) > peakIndex then
 				flag100 <= '1';
-				maxIndex(2) <= std_logic_vector(count100 - 1);
 			end if;
 			if 10*to_integer(count10) > peakIndex - 100*to_integer(count100 - 1) and flag100 = '1' then
 				flag10 <= '1';
-				maxIndex(1) <= std_logic_vector(count10 - 1);
 			end if;
 			if count1 > peakIndex - 100*to_integer(count100 - 1) - 10*to_integer(count10 - 1) and flag10 ='1' then
 				flag1 <= '1';
-				maxIndex(0) <= std_logic_vector(count1 - 1);
 				conversionComplete <= '1';
 			end if;
 		end if;
 	end process;
 	
-	
-	requested_results: process(reset, resultsValid, totalDataArray, peakIndex, totalSum)--the peak index will be in BCD format so not sure how correct this will be (Alex)
+	maxIndex_allocation:process(clk, reset, flag1)
 	begin
-		if resultsValid = '1' then
+		if reset = '1' then
+			maxIndex(2) <=  "0000";
+			maxIndex(1)	<= "0000";
+			maxIndex(0) <= "0000";
+		elsif rising_edge(clk) and flag1 = '1' then
+			maxIndex(2) <=  std_logic_vector(count100 - 1);
+			maxIndex(1)	<= std_logic_vector(count10 - 1);
+			maxIndex(0) <= std_logic_vector(count1 - 1);
+		else
+			null;
+		end if;
+	end process;
+	
+	requested_results: process(reset, resultsValid, totalDataArray, peakIndex,clk)--the peak index will be in BCD format so not sure how correct this will be (Alex)
+	begin
+		if reset = '1' then
 			dataResults(0) <= "00000000";
 			dataResults(1) <= "00000000";
 			dataResults(2) <= "00000000";
-			dataResults(3) <= totalDataArray(peakIndex);
+			dataResults(3) <= "00000000";
 			dataResults(4) <= "00000000";
 			dataResults(5) <= "00000000";
 			dataResults(6) <= "00000000";
 			--Perfect Case at least 7 bytes
-			if peakIndex > 2 and peakIndex < totalSum - 4 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-				dataResults(6) <= totalDataArray(peakIndex + 3);
-			elsif peakIndex > 2 and peakIndex < totalSum - 3 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex > 2 and peakIndex < totalSum - 2 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex > 2 and peakIndex < totalSum - 1 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-			elsif peakIndex > 1 and peakIndex < totalSum - 3 then
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex > 1 and peakIndex < totalSum - 2 then
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex = 1  and peakIndex < totalSum - 3 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex = 1 and peakIndex < totalSum - 2 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex = 1 and peakIndex < totalSum - 1 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-			end if;
+		elsif rising_edge(clk) and resultsValid = '1' then
+			dataResults(0) <= totalDataArray(peakIndex - 3);
+			dataResults(1) <= totalDataArray(peakIndex - 2);
+			dataResults(2) <= totalDataArray(peakIndex - 1);
+			dataResults(3) <= totalDataArray(peakIndex);
+			dataResults(4) <= totalDataArray(peakIndex + 1);
+			dataResults(5) <= totalDataArray(peakIndex + 2);
+			dataResults(6) <= totalDataArray(peakIndex + 3);
+		else
+			null;
 		end if;
 	end process; -- end requested_results
   
