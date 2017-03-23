@@ -74,7 +74,7 @@ begin
 			end if;
 		when dataRequest => 			-- Requesting data from the generator
 			if dataArrived = '1' then
-				nextState <= sendBytes;
+				nextState <= s2;
 			elsif switch ='1' then
 				nextState <= s1;
 			end if;
@@ -126,7 +126,6 @@ begin
 			dataReady <= '1';		--while requesting data, the data will also start sending indivdual bytes to the command processor
 			beginRequest <= '1';
 			countEn <= '1';
-			
 		end if;
 		if curState = s1 then
 		  beginRequest <= '1';
@@ -225,17 +224,19 @@ begin
 		end if;
 	end process;
 
+	
+
+-----------------------------------------------------------------------------
+
+----------------  Storing data processes ------------------------------------
+
 	delay_ctrl_2:process(clk) -- A register storing the delayed value of the ctrlIn signal
 	begin
 		if rising_edge(clk) then
 			ctrl_2Delayed <= ctrlIn;
 		end if;
 	end process;
-
------------------------------------------------------------------------------
-
-----------------  Storing data processes ------------------------------------
-
+	
 	send_byte:process(totalDataArray,clk, N)
 	begin
 		if rising_edge(clk) and N > 0 then
