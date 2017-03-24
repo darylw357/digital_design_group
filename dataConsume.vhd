@@ -1,15 +1,20 @@
+--dataConsume.vhd
+
+--The Data Processor
+--By Alexander Hamilton & Daryl White
+-----------------------------------------------------------
+
+--Packages
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.common_pack.all;
 
---code goes here
-
 entity dataConsume is
 	port(
 		clk:in std_logic;
-		reset: in std_logic; -- synchronous reset
-		start: in std_logic; -- goes high to signal data transfer
+		reset: in std_logic; 
+		start: in std_logic; 
 		numWords_bcd: in BCD_ARRAY_TYPE(2 downto 0);
 		ctrlIn: in std_logic;
 		ctrlOut: out std_logic;
@@ -18,20 +23,21 @@ entity dataConsume is
 		byte: out std_logic_vector(7 downto 0);
 		seqDone: out std_logic;
 		maxIndex: out BCD_ARRAY_TYPE(2 downto 0);
-		dataResults: out CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1) -- index 3 holds the peak
+		dataResults: out CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1) 
 		);
 end;
 
 
---####### Architecture between command processor and data processor #######--
+
+-------------------- Architecture  ---------------------------
 architecture dataConsume_Arch of dataConsume is
-	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak); --States go here
+	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, dataRequestSwitch, sendBytesSwitch); --States go here
 	--Signals
 	signal curState, nextState: state_type; -- Used for state machine control
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0); --Stores numWords in a register
-	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in the summing of numWords
+	signal integerPosistion3,integerPosistion2,integerPosistion1, totalSum : integer; -- Integers involved in the summing of numWord
 	signal N: integer := 0; --Controls the allocation of the data into the array
-	signal resetN: std_logic; -- resets N back to zero when in init state;
+	signal resetCounter: std_logic; -- A synchronous reset signal that resets counters and the peak byte
 	signal beginRequest, endRequest: std_logic; --Tells the processor to stop and start requesting data from the generator
 	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in signed binary
@@ -40,68 +46,124 @@ architecture dataConsume_Arch of dataConsume is
 	signal resultsValid: std_logic; --When the array has the correct number of bytes in it
 	signal dataArrived: std_logic; -- Checks that data has started to be allocated into the global array
 	signal conversionComplete: std_logic; --Checks that peakIndex has been converted into a bcd format
+	signal toggle: std_logic; -- Used for toggling ctrlOut between 1 and 0
+	signal switch: std_logic; -- Used to switch between states that alters toggle
+	signal countEn: std_logic; --Enables the count for number of switches
+	signal countInt: integer; --Counts the number of switches
+	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
+	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
 
+----------------------------------------------------------------
 begin
 
-
 ----------- Processes handling the state machine --------------
+	
 	state_reg: process(clk, reset)
 	begin
 		if reset ='1' then --if reset goes high, go back to the inital state
 			curState <= init;
 		elsif rising_edge(clk) then --Rising clock edge
 			curState <= nextState;
+		else
+		   null;
 		end if;
 	end process;
 
-	state_order: process(curState, start, dataArrived, endRequest, conversionComplete)
+	state_order: process(curState, start, dataArrived, endRequest, conversionComplete, switch)
 	begin
-		if start ='0' then 				--Start must always be asserted for the data processor to run
-			nextState <= init;
-		end if;
 		case curState is
 		when init => 					-- Waiting for the start signal
 			if start = '1' then
 				nextState <= dataRequest;
+			else
+				nextState <= init;
 			end if;
 		when dataRequest => 			-- Requesting data from the generator
-			if dataArrived = '1' then
+			if start = '0' then
+				nextState <= init;
+			elsif dataArrived = '1' then
+				nextState <= sendBytesSwitch;
+			elsif switch ='1' then
+				nextState <= dataRequestSwitch;
+			else
+				nextState <= dataRequest;
+			end if;
+		when dataRequestSwitch =>		--Similar to dataRequest but contains the toggle
+			if start = '0' then
+				nextState <= init;
+			elsif dataArrived = '1' then
 				nextState <= sendBytes;
+			else
+				nextState <= dataRequest;
 			end if;
 		when sendBytes => 				--Start sending the bytes from the global array
-			if endRequest = '1' then
+			if start = '0' then
+				nextState <= init;
+			elsif endRequest = '1' then
 				nextState <= assignPeak;
+			elsif switch ='1' then
+				nextState <= sendBytesSwitch;
+			else
+				nextState <= sendBytes;
+			end if;
+		when sendBytesSwitch =>			--Similar to sendBytes but contains the a toggle
+			if start = '0' then
+				nextState <= init;
+			elsif endRequest = '1' then
+				nextState <= assignPeak;
+			else
+				nextState <= sendBytes;
 			end if;
 		when assignPeak =>				 		-- Find the peak value and assign it and the 3 bytes before and after into dataResults. 
 			if conversionComplete = '1' then	--Also the assigning of maxIndex occurs in this state
 				nextState <= sendPeak;
+			else
+				nextState <= assignPeak;
 			end if;
-		when sendPeak =>						-- Sends dataResults, and maxIndex and resets many of the signals in the machine
+		when sendPeak =>						-- Sends dataResults, and maxIndex and resets counters in the machine
 			nextState <= init;
 		when others =>
+			nextState <= init;
 		end case;
 	end process;
 
 	combinational_output:process(curState)
 	begin
+		--Assigning default values
 		dataReady <= '0';
 		seqDone <= '0';
 		beginRequest <= '0';
 		resultsValid <= '0';
-		resetN <= '0';
+		resetCounter <= '0';
+		toggle <= '0';
+		countEn <= '0';
 		if curState = dataRequest then
 			beginRequest <= '1';	--Tells the data processor to start requesting data from the generator
+			toggle <= '0';
+			countEn <= '1';
 		end if;
 		if curState = sendBytes then
 			dataReady <= '1';		--while requesting data, the data will also start sending indivdual bytes to the command processor
 			beginRequest <= '1';
+			countEn <= '1';
+		end if;
+		if curState = dataRequestSwitch then --Assert toggle
+			beginRequest <= '1';
+			countEn <= '1';
+			toggle <= '1';
+		end if; 
+		if curState = sendBytesSwitch then --Assert toggle
+			beginRequest <='1';
+			dataReady <= '1';
+			countEn <= '1';
+			toggle <= '1';
 		end if;
 		if curState = assignPeak then --Starts the allocation of bytes into dataResults and and converts the peak index into BCD format
 			resultsValid <= '1';
 		end if;
 		if curState = sendPeak then --When the bytes have been put into dataResults and everything is ready to be sent
 			seqDone <= '1';
-			resetN <= '1'; --Resets some of the signals used in the data processor
+			resetCounter <= '1'; --Resets some of the signals used in the data processor
 		end if;
 	end process;
   
@@ -109,60 +171,69 @@ begin
 
 -------   Processes handling numWords_BCD  --------------
 
-	register_numWords:process(start, clk) -- Registers the data from numWords when Start = 1
+	register_numWords:process(start, clk, reset) -- Registers the data from numWords when Start = 1
 	begin
-		if rising_edge(clk) then
+		if reset = '1' then
+			numWordsReg <= (X"0",X"0",X"0"); 
+		elsif rising_edge(clk) then
 			if start = '1' then
 				numWordsReg <= numWords_bcd;
 			end if;
 		end if;
 	end process;
 
-	convert_numWords:process(numWordsReg, reset) --Converting each BCD value into a digit
+	convert_numWords:process(numWordsReg) --Converting each BCD value into a digit
 	begin
-		if reset = '1' then
-			integerPosistion1 <=0;
-			integerPosistion2 <=0;
-			integerPosistion3 <=0;
-		end if;
 		integerPosistion1 <= to_integer(unsigned(numWordsReg(0)));
 		integerPosistion2 <= to_integer(unsigned(numWordsReg(1)));
 		integerPosistion3 <= to_integer(unsigned(numWordsReg(2)));
 	end process;
 
-	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3, reset) -- summing the digits to convert from BCD to an integer
+	summing_numWords:process(integerPosistion1, integerPosistion2, integerPosistion3) -- summing the digits to convert from BCD to an integer
 	begin
-		if reset = '1' then
-			totalSum <= 0;
-		else
-			totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
-		end if;
+		totalSum <= (integerPosistion1 + (integerPosistion2*10) + (integerPosistion3*100));
 	end process;
 
 --------------------------------------------------------------------------
 
 ---------- Processes handling the handshaking protocol  ------------------
-	request_data:process(CLK, reset, resetN)
-	variable switching: std_logic := '0'; 
-	variable switchCounter: integer := 0; -- switchCounter counts the number of times that ctrlOut has switched and therefore the number of bits requested
-	begin                                
-		ctrlOut <= switching;
-		if reset = '1' then
-			switching := '0';
-			switchCounter := 0;
+	
+	ctrl_out_switching:process(toggle) --When going into the "switch" states, ctrlOut changes to 1.
+	begin
+		ctrlOut <= '0';
+		if toggle = '1' then
+		   ctrlOut <= '1';
 		end if;
-		if rising_edge(clk) then
-			if resetN = '1' then
-			   switchCounter := 0;
-			end if;
-			if switchCounter = totalSum  then
-			elsif beginRequest = '1'then
-				ctrlOut <= switching;
-				switching := not switching;
-				switchCounter := switchCounter + 1;
+	end process;
+
+	ctrlOut_counter : process(CLK, countEN, reset, resetCounter, totalSum)  --Counts the number of times a transistion has occured on the ctrlOut line.
+	begin
+		if reset ='1' then
+			countInt <= 0;
+		elsif rising_edge(clk) then
+			if resetCounter = '1' then
+				countInt <= 0;
+			elsif countEn = '1' and countInt < totalSum then
+				countInt <= countInt + 1;
 			end if;
 		end if;
 	end process;
+	
+	request_data:process(countInt, totalSum, beginRequest) -- signals to the state machine when to transistion to the switch states
+	begin                                
+		switch <= '0';
+		if countInt >= (totalSum) then
+			switch <= '0';
+		elsif beginRequest = '1' and countInt < totalSum then
+			switch <= '1';
+		end if;
+	end process;
+
+	
+
+-----------------------------------------------------------------------------
+
+----------------  Storing data processes ------------------------------------
 
 	delay_ctrl_2:process(clk) -- A register storing the delayed value of the ctrlIn signal
 	begin
@@ -170,173 +241,168 @@ begin
 			ctrl_2Delayed <= ctrlIn;
 		end if;
 	end process;
-
------------------------------------------------------------------------------
-
-----------------  Storing data processes ------------------------------------
-
-	send_byte:process(totalDataArray,clk)
+	
+	send_byte:process(clk, dataArrived, reset, totalDataArray, N, totalSum) -- Sends the bytes from the global data array to command processor
 	begin
-		if rising_edge(clk) and N > 0 then
+    if reset = '1' then
+      byte <= "00000000";
+    end if;
+		if rising_edge(clk) and dataArrived = '1' and N > 0 then
 			byte <= totalDataArray(N-1);
+		elsif rising_edge(clk) and N = totalSum and N>0 then
+		  byte <= totalDataArray(totalSum-1);
 		end if;	
 	end process; 
   
-	global_data_array: process(clk, beginRequest, resetN) 
+	global_array_counter: process(CLK, reset, resetCounter) --Controls the index of the global data array
+		if reset = '1' then
+			N <= 0;
+		elsif rising_edge(clk) then
+			if resetCounter = '1' then
+				N <= 0;
+			elsif N < totalSum and dataArrived = '1' then
+				N <= N + 1;
+			end if;
+		end if;
+	end process;
+	
+	ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
+	
+	global_data_array: process(beginRequest, N, ctrl_2Detection, totalSum)  -- Controls the allocation of bytes into the global data array
 	begin
 		dataArrived <= '0';
 		endRequest <= '0';
-		if resetN = '1' and rising_edge(clk) then
-		    N <= 0;
-		end if;
-		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks for the change in CtrlIn signal from the data generator
-		if rising_edge(clk) then
-			if beginRequest = '1' and endRequest = '0' then
-				if N >= (totalSum) AND N > 0 then --When the number of bytes requested is receieved, a signal is sent to move into the next state
-					endRequest <= '1';
-				elsif ctrl_2Detection = '1' then
-					totalDataArray(N) <= data;
-					N <= N + 1;
-					dataArrived <= '1';
-				end if;
-			end if;
-			
+		if N >= totalSum and N > 0 then
+			endRequest <= '1';
+		elsif beginRequest = '1' and ctrl_2Detection = '1' then
+			dataArrived <= '1';
+		else
+			NULL;
 		end if;
 	end process; --end data array
-
+	
+	global_data_allocation:process(clk, reset, ctrl_2Detection, data, N) --Allocates the bytes from the data generator in the data array on the rising clock edge
+	begin 
+		if reset = '1' then
+			totalDataArray(N) <= "00000000";
+		elsif rising_edge(clk) and ctrl_2Detection = '1' then
+			totalDataArray(N) <= data;
+		else
+			null;
+		end if;
+	end process;
 -------------------------------------------------------------------------------
 	
 ------------	Processes for finding the converting peak values --------------
-	detector: process(clk, reset, resetN, beginRequest) 						
+	
+	
+	detector: process(clk, reset, resetCounter, beginRequest) 		--Finds the peak value by storing the largest byte and then checking that byte incoming bytes from the data array				
 	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
 		if reset ='1' then
 			peakIndex <= 0;
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001"; 
-		end if;
-		if rising_edge(clk) then
-			if resetN = '1' then
+		elsif rising_edge(clk) then
+			if resetCounter = '1' then --Counter reset
 			   peakIndex <= 0;
 			   valueFromArray := "10000001"; 
 			   rollingPeakBin <= "10000001";
 			end if;  
 			if N > 0 and beginRequest = '1' then
-				valueFromArray := totalDataArray(N-1); --Stores the the data bit in a variable which can be converted to signed
-				if signed(valueFromArray) >=(rollingPeakBin) then --Compares the saved variable to the current peak value
+				valueFromArray := totalDataArray(N-1); 				--Stores the the data bit in a variable which can be converted to signed
+				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(totalDataArray(N-1));
-					peakIndex <= N-1; --Set the index number of the peak value
+					peakIndex <= N-1; 								--Set the index number of the peak value
 				end if;
 			end if;
 		end if;
 	end process;
 
-	
-	-- The process works by finding each digit from left right (e.g. for 480 it finds 400, then 80, and then 0)
-	peakIndex_to_BCD:process(peakIndex, clk, reset)
-	variable counter100: unsigned(3 downto 0):= "0000"; -- Counts the hundreds
-	variable counter10: unsigned(3 downto 0):= "0000";	-- Counts the tens
-	variable counter1: unsigned(3 downto 0):= "0000";	-- Counts the ones
-	variable flag1: std_logic:= '0'; --When the 100 has been found
-	variable flag2: std_logic:= '0'; --When the 10 digit has been found
-	variable flag3: std_logic:= '0'; --When the peak index is converted
+	maxIndex_counters:process(CLK, reset, resetCounter, resultsValid, flag100,flag10,flag1) --Counters involved in converting an integer into bcd format
 	begin
-		conversionComplete <= '0';
-		if reset ='1' or resetN ='1' then
-			counter100:= "0000";
-			counter10:= "0000";
-			counter1:= "0000";
-			flag1 := '0';
-			flag2 := '0';
-			flag3 := '0';
-			conversionComplete <= '0';
-		end if;
-		if resultsValid = '1' then
-			if rising_edge(clk) then
-				if flag1 = '0' then
-					if (to_integer(counter100)*100) > peakIndex then 		--First checks for which hundred the peak index is in
-						maxIndex(2) <= std_logic_vector(counter100 - 1);
-						flag1:='1';
-					else
-						counter100 := (counter100 + 1);
-					end if;
+		if reset = '1' then
+			count100 <= "0000";
+			count10 <= "0000";
+			count1 <= "0000";
+		elsif rising_edge(clk) then
+			if resetCounter = '1' then
+				count100 <= "0000";
+				count10 <= "0000";
+				count1 <= "0000";
+			end if;
+			if resultsValid = '1' then --Wait until all the values are in the global array
+				if flag100 = '0' then -- Until hundredths has been found
+					count100 <= (count100 + 1);
+				elsif flag100 = '1' and flag10 = '0' then --When the hundredths has been found and tenths have not been found 
+					count10 <= (count10 +1);
+				elsif flag10 = '1' and flag1 = '0' then --When the tenths have been found and the ones have not been found
+					count1 <= (count1 +1);
 				end if;
-				if flag2 = '0' and flag1 = '1' then --When the 100 has been found
-					if (to_integer(counter10)*10) > (peakIndex - (100*to_integer(counter100-1))) then
-						maxIndex(1) <= std_logic_vector(counter10 - 1);
-						flag2 :='1';
-					else
-						counter10 := (counter10 + 1);
-					end if;
-				end if;
-				if flag3 = '0' and flag2 = '1' then --when the 10 has been found
-					if to_integer(counter1) > (peakIndex - (100*to_integer(counter100-1)) - (10*to_integer(counter10-1))) then
-						maxIndex(0) <= std_logic_vector(counter1 - 1);
-						flag3 := '1';
-						conversionComplete <= '1';
-					else
-						counter1 := (counter1 + 1);
-					end if;
-				end if;	
 			end if;
 		end if;
 	end process;
 	
-	
-	requested_results: process(reset, resultsValid)--the peak index will be in BCD format so not sure how correct this will be (Alex)
+	-- The process works by finding each digit from left right (e.g. for 480 it finds 400, then 80, and then 0)
+	peakIndex_to_BCD:process(peakIndex, resultsValid, count100, count10, count1, flag100, flag10)
 	begin
+		flag1 <= '0';
+		flag10 <= '0';
+		flag100 <= '0';
+		conversionComplete <= '0';
 		if resultsValid = '1' then
+			if 100*to_integer(count100) > peakIndex then
+				flag100 <= '1';
+			end if;
+			if 10*to_integer(count10) > peakIndex - 100*to_integer(count100 - 1) and flag100 = '1' then --Subtracts the hundredths from the peak index
+				flag10 <= '1';
+			end if;
+			if count1 > peakIndex - 100*to_integer(count100 - 1) - 10*to_integer(count10 - 1) and flag10 ='1' then --Subtracts the hundredths and the tenths from the peak index
+				flag1 <= '1';
+				conversionComplete <= '1';
+			end if;
+		end if;
+	end process;
+	
+	maxIndex_allocation:process(clk, reset, flag1) --When the ones have been found, the maxdIndex is set on a rising clock edge
+	begin
+		if reset = '1' then
+			maxIndex(2) <= "0000";
+			maxIndex(1)	<= "0000";
+			maxIndex(0) <= "0000";
+		elsif rising_edge(clk) and flag1 = '1' then
+			maxIndex(2) <= std_logic_vector(count100 - 1);
+			maxIndex(1)	<= std_logic_vector(count10 - 1);
+			maxIndex(0) <= std_logic_vector(count1 - 1);
+		else
+			null;
+		end if;
+	end process;
+	
+	requested_results: process(reset, resultsValid, totalDataArray, peakIndex,clk)--Allocates the the peak byte and the 3 bytes preceeding and following the peak byte
+	begin
+		if reset = '1' then
 			dataResults(0) <= "00000000";
 			dataResults(1) <= "00000000";
 			dataResults(2) <= "00000000";
-			dataResults(3) <= totalDataArray(peakIndex);
+			dataResults(3) <= "00000000";
 			dataResults(4) <= "00000000";
 			dataResults(5) <= "00000000";
 			dataResults(6) <= "00000000";
-			--Perfect Case at least 7 bytes
-			if peakIndex > 2 and peakIndex < totalSum - 4 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-				dataResults(6) <= totalDataArray(peakIndex + 3);
-			elsif peakIndex > 2 and peakIndex < totalSum - 3 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex > 2 and peakIndex < totalSum - 2 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex > 2 and peakIndex < totalSum - 1 then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-			elsif peakIndex > 1 and peakIndex < totalSum - 3 then
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex > 1 and peakIndex < totalSum - 2 then
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex = 1  and peakIndex < totalSum - 3 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-			elsif peakIndex = 1 and peakIndex < totalSum - 2 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-			elsif peakIndex = 1 and peakIndex < totalSum - 1 then
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-			end if;
+		elsif rising_edge(clk) and resultsValid = '1' then
+			dataResults(0) <= totalDataArray(peakIndex - 3);
+			dataResults(1) <= totalDataArray(peakIndex - 2);
+			dataResults(2) <= totalDataArray(peakIndex - 1);
+			dataResults(3) <= totalDataArray(peakIndex);
+			dataResults(4) <= totalDataArray(peakIndex + 1);
+			dataResults(5) <= totalDataArray(peakIndex + 2);
+			dataResults(6) <= totalDataArray(peakIndex + 3);
+		else
+			null;
 		end if;
 	end process; -- end requested_results
   
 
 end;
+
+-------------------------------------------------------------------------------------
