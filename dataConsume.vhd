@@ -52,7 +52,8 @@ architecture dataConsume_Arch of dataConsume is
 	signal countInt: integer := 0; --Counts the number of switches
 	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
 	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
-	signal shiftRegister: char_array_type(0 to 7);
+	signal shiftRegister: char_array_type(0 to 6);
+	signal peakFound: std_logic;
 
 ----------------------------------------------------------------
 begin
@@ -241,20 +242,29 @@ begin
 --------------------------  Shift Register   --------------------------------
 
 
-  shift_register_allocate:process(clk, reset, shiftRegister, Data)
+  shift_register_allocate:process(clk, reset, shiftRegister, Data, resetCounter, totalSum)
 	variable shiftCounter : integer;
 	begin
 		if reset = '1' then
-			shiftRegister(0) <= "00000000";
-			shiftRegister(1) <= "00000000";
-			shiftRegister(2) <= "00000000";
-			shiftRegister(3) <= "00000000";
-			shiftRegister(4) <= "00000000";
-			shiftRegister(5) <= "00000000";
-			shiftRegister(6) <= "00000000";
-			shiftRegister(7) <= "00000000";
+			shiftRegister(0) <= "10000001";
+			shiftRegister(1) <= "10000001";
+			shiftRegister(2) <= "10000001";
+			shiftRegister(3) <= "10000001";
+			shiftRegister(4) <= "10000001";
+			shiftRegister(5) <= "10000001";
+			shiftRegister(6) <= "10000001";
 			shiftCounter := 0;
 		elsif rising_edge(clk) then
+			if resetCounter = '1' then
+				shiftRegister(0) <= "10000001";
+				shiftRegister(1) <= "10000001";
+				shiftRegister(2) <= "10000001";
+				shiftRegister(3) <= "10000001";
+				shiftRegister(4) <= "10000001";
+				shiftRegister(5) <= "10000001";
+				shiftRegister(6) <= "10000001";
+				shiftCounter := 0;
+			end if;
 			if ctrl_2Detection = '1' then
 				shiftRegister(1) <= shiftRegister(0);
 				shiftRegister(2) <= shiftRegister(1);
@@ -262,9 +272,8 @@ begin
 				shiftRegister(4) <= shiftRegister(3);
 				shiftRegister(5) <= shiftRegister(4);
 				shiftRegister(6) <= shiftRegister(5);
-				shiftRegister(7) <= shiftRegister(6);
 				if shiftCounter >= totalSum then
-					shiftRegister(0) <= "00000000";
+					shiftRegister(0) <= "10000001";
 				else
 					shiftRegister(0) <= data;
 				end if;
@@ -277,7 +286,6 @@ begin
 			shiftRegister(4) <= shiftRegister(4);
 			shiftRegister(5) <= shiftRegister(5);
 			shiftRegister(6) <= shiftRegister(6);
-			shiftRegister(7) <= shiftRegister(7);
 			shiftRegister(0) <= shiftRegister(0);
 		end if;
 	end process;
@@ -353,29 +361,58 @@ begin
 ------------	Processes for finding the converting peak values --------------
 	
 	
-	detector: process(clk, reset, resetCounter, beginRequest) 		--Finds the peak value by storing the largest byte and then checking that byte incoming bytes from the data array				
+	detector: process(clk, reset, resetCounter, beginRequest, shiftRegister) 		--Finds the peak value by storing the largest byte and then checking that byte incoming bytes from the data array				
 	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
 		if reset = '1' then
 			peakIndex <= 0;
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001"; 
+			dataResults(0) <= "00000000";
+			dataResults(1) <= "00000000";
+			dataResults(2) <= "00000000";
+			dataResults(3) <= "00000000";
+			dataResults(4) <= "00000000";
+			dataResults(5) <= "00000000";
+			dataResults(6) <= "00000000";
 		elsif rising_edge(clk) then
 			if resetCounter = '1' then --Counter reset
-			   peakIndex <= 0;
-			   valueFromArray := "10000001"; 
-			   rollingPeakBin <= "10000001";
+				peakIndex <= 0;
+				valueFromArray := "10000001"; 
+				rollingPeakBin <= "10000001";
+				dataResults(0) <= "00000000";
+				dataResults(1) <= "00000000";
+				dataResults(2) <= "00000000";
+				dataResults(3) <= "00000000";
+				dataResults(4) <= "00000000";
+				dataResults(5) <= "00000000";
+				dataResults(6) <= "00000000";
 			end if;  
 			if N > 0 and beginRequest = '1' then
 				valueFromArray := shiftRegister(3); 				--Stores the the data bit in a variable which can be converted to signed
 				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
-					rollingPeakBin <= signed(totalDataArray(N-1));
-					peakIndex <= N-1; 								--Set the index number of the peak value
+					rollingPeakBin <= signed(shiftRegister(3));
+					peakIndex <= N-4;
+					dataResults(0) <= shiftRegister(0);
+					dataResults(1) <= shiftRegister(1);
+					dataResults(2) <= shiftRegister(2);
+					dataResults(3) <= shiftRegister(3);
+					dataResults(4) <= shiftRegister(4);
+					dataResults(5) <= shiftRegister(5);
+					dataResults(6) <= shiftRegister(6);					--Set the index number of the peak value
 				end if;
 			end if;
 		end if;
 	end process;
-
+	
+	-- peak_found:process()
+	-- begin
+		-- peakFound = 0;
+		-- if then
+			-- peakFound = '1';
+		-- end if;
+	-- end process;
+	
 	maxIndex_counters:process(CLK, reset, resetCounter, resultsValid, flag100,flag10,flag1) --Counters involved in converting an integer into bcd format
 	begin
 		if reset = '1' then
@@ -438,30 +475,30 @@ begin
 		end if;
 	end process;
 	
-	requested_results: process(reset, resultsValid, totalDataArray, peakIndex,clk)--Allocates the the peak byte and the 3 bytes preceeding and following the peak byte
-	begin
-		if reset = '1' then
-			dataResults(0) <= "00000000";
-			dataResults(1) <= "00000000";
-			dataResults(2) <= "00000000";
-			dataResults(3) <= "00000000";
-			dataResults(4) <= "00000000";
-			dataResults(5) <= "00000000";
-			dataResults(6) <= "00000000";
-		elsif rising_edge(clk) then
-			if resultsValid = '1' then
-				dataResults(0) <= totalDataArray(peakIndex - 3);
-				dataResults(1) <= totalDataArray(peakIndex - 2);
-				dataResults(2) <= totalDataArray(peakIndex - 1);
-				dataResults(3) <= totalDataArray(peakIndex);
-				dataResults(4) <= totalDataArray(peakIndex + 1);
-				dataResults(5) <= totalDataArray(peakIndex + 2);
-				dataResults(6) <= totalDataArray(peakIndex + 3);
-			end if;
-		else
-			null;
-		end if;
-	end process; -- end requested_results
+	-- requested_results: process(reset, resultsValid, totalDataArray, peakIndex,clk)--Allocates the the peak byte and the 3 bytes preceeding and following the peak byte
+	-- begin
+		-- if reset = '1' then
+			-- dataResults(0) <= "00000000";
+			-- dataResults(1) <= "00000000";
+			-- dataResults(2) <= "00000000";
+			-- dataResults(3) <= "00000000";
+			-- dataResults(4) <= "00000000";
+			-- dataResults(5) <= "00000000";
+			-- dataResults(6) <= "00000000";
+		-- elsif rising_edge(clk) then
+			-- if resultsValid = '1' then
+				-- dataResults(0) <= shiftRegister(0);
+				-- dataResults(1) <= shiftRegister(1);
+				-- dataResults(2) <= shiftRegister(2);
+				-- dataResults(3) <= shiftRegister(3);
+				-- dataResults(4) <= shiftRegister(4);
+				-- dataResults(5) <= shiftRegister(5);
+				-- dataResults(6) <= shiftRegister(6);
+			-- end if;
+		-- else
+			-- null;
+		-- end if;
+	-- end process; -- end requested_results
   
 
 end;
