@@ -39,7 +39,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal N: integer := 0; --Controls the allocation of the data into the array
 	signal resetCounter: std_logic; -- A synchronous reset signal that resets counters and the peak byte
 	signal beginRequest, endRequest: std_logic; --Tells the processor to stop and start requesting data from the generator
-	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
+	--signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in signed binary
 	signal peakIndex: integer := 0; --Index of peak byte in integer form
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals (ctrl_2 is now ctrlIn)
@@ -303,15 +303,15 @@ begin
 		end if;
 	end process;
 	
-	send_byte:process(clk, dataArrived, reset, totalDataArray, N, totalSum) -- Sends the bytes from the global data array to command processor
+	send_byte:process(clk, dataArrived, reset, shiftRegister, N, totalSum) -- Sends the bytes from the global data array to command processor
 	begin
     if reset = '1' then
-      byte <= "00000000";
+		byte <= "00000000";
     end if;
 		if rising_edge(clk) and dataArrived = '1' and N > 0 then
-			byte <= totalDataArray(N-1);
+			byte <= shiftRegister(0);
 		elsif rising_edge(clk) and N = totalSum and N>0 then
-		  byte <= totalDataArray(totalSum-1);
+			byte <= shiftRegister(0);
 		end if;	
 	end process; 
   
@@ -325,13 +325,12 @@ begin
 			elsif N < totalSum and dataArrived = '1' then
 				N <= N + 1;
 			else
-			  N <= N;
+				N <= N;
 			end if;
 		end if;
 	end process;
 	
 	ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
-	
 	
 	global_data_array: process(beginRequest, N, ctrl_2Detection, totalSum)  -- Controls the allocation of bytes into the global data array
 	begin
@@ -346,16 +345,6 @@ begin
 		end if;
 	end process; --end data array
 	
-	global_data_allocation:process(clk, reset, ctrl_2Detection, data, N, totalDataArray) --Allocates the bytes from the data generator in the data array on the rising clock edge
-	begin 
-		if reset = '1' then
-			totalDataArray(N) <= "00000000";
-		elsif rising_edge(clk) and ctrl_2Detection = '1' then
-			totalDataArray(N) <= data;
-		else
-			totalDataArray(N) <= totalDataArray(N);
-		end if;
-	end process;
 -------------------------------------------------------------------------------
 	
 ------------	Processes for finding the converting peak values --------------
