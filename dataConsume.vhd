@@ -41,7 +41,7 @@ architecture dataConsume_Arch of dataConsume is
 	signal beginRequest, endRequest: std_logic; --Tells the processor to stop and start requesting data from the generator
 	signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "10000001"; --Peak byte in signed binary
-	signal peakIndex: integer; --Index of peak byte in integer form
+	signal peakIndex: integer := 0; --Index of peak byte in integer form
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals (ctrl_2 is now ctrlIn)
 	signal resultsValid: std_logic; --When the array has the correct number of bytes in it
 	signal dataArrived: std_logic; -- Checks that data has started to be allocated into the global array
@@ -49,23 +49,24 @@ architecture dataConsume_Arch of dataConsume is
 	signal toggle: std_logic; -- Used for toggling ctrlOut between 1 and 0
 	signal switch: std_logic; -- Used to switch between states that alters toggle
 	signal countEn: std_logic; --Enables the count for number of switches
-	signal countInt: integer; --Counts the number of switches
+	signal countInt: integer := 0; --Counts the number of switches
 	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
 	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
+	signal shiftRegister: char_array_type(0 to 7);
 
 ----------------------------------------------------------------
 begin
 
 ----------- Processes handling the state machine --------------
 	
-	state_reg: process(clk, reset)
+	state_reg: process(clk, reset, curState)
 	begin
-		if reset ='1' then --if reset goes high, go back to the inital state
+		if reset = '1' then --if reset goes high, go back to the inital state
 			curState <= init;
 		elsif rising_edge(clk) then --Rising clock edge
 			curState <= nextState;
 		else
-		   null;
+		   curState <= curState;
 		end if;
 	end process;
 
@@ -178,6 +179,8 @@ begin
 		elsif rising_edge(clk) then
 			if start = '1' then
 				numWordsReg <= numWords_bcd;
+			else
+			  numWordsReg <= numWordsReg;
 			end if;
 		end if;
 	end process;
@@ -208,13 +211,15 @@ begin
 
 	ctrlOut_counter : process(CLK, countEN, reset, resetCounter, totalSum)  --Counts the number of times a transistion has occured on the ctrlOut line.
 	begin
-		if reset ='1' then
+		if reset = '1' then
 			countInt <= 0;
 		elsif rising_edge(clk) then
 			if resetCounter = '1' then
 				countInt <= 0;
 			elsif countEn = '1' and countInt < totalSum then
 				countInt <= countInt + 1;
+			else
+			  countInt <= countInt;
 			end if;
 		end if;
 	end process;
@@ -230,6 +235,54 @@ begin
 	end process;
 
 	
+
+-----------------------------------------------------------------------------
+
+--------------------------  Shift Register   --------------------------------
+
+
+  shift_register_allocate:process(clk, reset, shiftRegister, Data)
+	variable shiftCounter : integer;
+	begin
+		if reset = '1' then
+			shiftRegister(0) <= "00000000";
+			shiftRegister(1) <= "00000000";
+			shiftRegister(2) <= "00000000";
+			shiftRegister(3) <= "00000000";
+			shiftRegister(4) <= "00000000";
+			shiftRegister(5) <= "00000000";
+			shiftRegister(6) <= "00000000";
+			shiftRegister(7) <= "00000000";
+			shiftCounter := 0;
+		elsif rising_edge(clk) then
+			if ctrl_2Detection = '1' then
+				shiftRegister(1) <= shiftRegister(0);
+				shiftRegister(2) <= shiftRegister(1);
+				shiftRegister(3) <= shiftRegister(2);
+				shiftRegister(4) <= shiftRegister(3);
+				shiftRegister(5) <= shiftRegister(4);
+				shiftRegister(6) <= shiftRegister(5);
+				shiftRegister(7) <= shiftRegister(6);
+				if shiftCounter >= totalSum then
+					shiftRegister(0) <= "00000000";
+				else
+					shiftRegister(0) <= data;
+				end if;
+				shiftCounter := shiftCounter + 1;
+			end if;
+		else
+			shiftRegister(1) <= shiftRegister(1);
+			shiftRegister(2) <= shiftRegister(2);
+			shiftRegister(3) <= shiftRegister(3);
+			shiftRegister(4) <= shiftRegister(4);
+			shiftRegister(5) <= shiftRegister(5);
+			shiftRegister(6) <= shiftRegister(6);
+			shiftRegister(7) <= shiftRegister(7);
+			shiftRegister(0) <= shiftRegister(0);
+		end if;
+	end process;
+
+
 
 -----------------------------------------------------------------------------
 
@@ -255,6 +308,7 @@ begin
 	end process; 
   
 	global_array_counter: process(CLK, reset, resetCounter) --Controls the index of the global data array
+	begin
 		if reset = '1' then
 			N <= 0;
 		elsif rising_edge(clk) then
@@ -262,11 +316,14 @@ begin
 				N <= 0;
 			elsif N < totalSum and dataArrived = '1' then
 				N <= N + 1;
+			else
+			  N <= N;
 			end if;
 		end if;
 	end process;
 	
 	ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
+	
 	
 	global_data_array: process(beginRequest, N, ctrl_2Detection, totalSum)  -- Controls the allocation of bytes into the global data array
 	begin
@@ -281,14 +338,14 @@ begin
 		end if;
 	end process; --end data array
 	
-	global_data_allocation:process(clk, reset, ctrl_2Detection, data, N) --Allocates the bytes from the data generator in the data array on the rising clock edge
+	global_data_allocation:process(clk, reset, ctrl_2Detection, data, N, totalDataArray) --Allocates the bytes from the data generator in the data array on the rising clock edge
 	begin 
 		if reset = '1' then
 			totalDataArray(N) <= "00000000";
 		elsif rising_edge(clk) and ctrl_2Detection = '1' then
 			totalDataArray(N) <= data;
 		else
-			null;
+			totalDataArray(N) <= totalDataArray(N);
 		end if;
 	end process;
 -------------------------------------------------------------------------------
@@ -299,7 +356,7 @@ begin
 	detector: process(clk, reset, resetCounter, beginRequest) 		--Finds the peak value by storing the largest byte and then checking that byte incoming bytes from the data array				
 	variable valueFromArray: std_logic_vector(7 downto 0);
 	begin
-		if reset ='1' then
+		if reset = '1' then
 			peakIndex <= 0;
 			valueFromArray := "10000001"; -- largest negative number
 			rollingPeakBin <= "10000001"; 
@@ -310,7 +367,7 @@ begin
 			   rollingPeakBin <= "10000001";
 			end if;  
 			if N > 0 and beginRequest = '1' then
-				valueFromArray := totalDataArray(N-1); 				--Stores the the data bit in a variable which can be converted to signed
+				valueFromArray := shiftRegister(3); 				--Stores the the data bit in a variable which can be converted to signed
 				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(totalDataArray(N-1));
 					peakIndex <= N-1; 								--Set the index number of the peak value
@@ -370,10 +427,12 @@ begin
 			maxIndex(2) <= "0000";
 			maxIndex(1)	<= "0000";
 			maxIndex(0) <= "0000";
-		elsif rising_edge(clk) and flag1 = '1' then
-			maxIndex(2) <= std_logic_vector(count100 - 1);
-			maxIndex(1)	<= std_logic_vector(count10 - 1);
-			maxIndex(0) <= std_logic_vector(count1 - 1);
+		elsif rising_edge(clk)then
+			if flag1 = '1' then	
+				maxIndex(2) <= std_logic_vector(count100 - 1);
+				maxIndex(1)	<= std_logic_vector(count10 - 1);
+				maxIndex(0) <= std_logic_vector(count1 - 1);
+			end if;
 		else
 			null;
 		end if;
@@ -389,14 +448,16 @@ begin
 			dataResults(4) <= "00000000";
 			dataResults(5) <= "00000000";
 			dataResults(6) <= "00000000";
-		elsif rising_edge(clk) and resultsValid = '1' then
-			dataResults(0) <= totalDataArray(peakIndex - 3);
-			dataResults(1) <= totalDataArray(peakIndex - 2);
-			dataResults(2) <= totalDataArray(peakIndex - 1);
-			dataResults(3) <= totalDataArray(peakIndex);
-			dataResults(4) <= totalDataArray(peakIndex + 1);
-			dataResults(5) <= totalDataArray(peakIndex + 2);
-			dataResults(6) <= totalDataArray(peakIndex + 3);
+		elsif rising_edge(clk) then
+			if resultsValid = '1' then
+				dataResults(0) <= totalDataArray(peakIndex - 3);
+				dataResults(1) <= totalDataArray(peakIndex - 2);
+				dataResults(2) <= totalDataArray(peakIndex - 1);
+				dataResults(3) <= totalDataArray(peakIndex);
+				dataResults(4) <= totalDataArray(peakIndex + 1);
+				dataResults(5) <= totalDataArray(peakIndex + 2);
+				dataResults(6) <= totalDataArray(peakIndex + 3);
+			end if;
 		else
 			null;
 		end if;
