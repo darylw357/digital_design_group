@@ -31,7 +31,7 @@ end;
 
 -------------------- Architecture  ---------------------------
 architecture dataConsume_Arch of dataConsume is
-	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, dataRequestSwitch, sendBytesSwitch); --States go here
+	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, dataRequestSwitch, sendBytesSwitch, checkPeak, finalByte); --States go here
 	--Signals
 	signal curState, nextState: state_type; -- Used for state machine control
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0); --Stores numWords in a register
@@ -53,6 +53,8 @@ architecture dataConsume_Arch of dataConsume is
 	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
 	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
 	signal shiftRegister: char_array_type(0 to 6);
+	signal peakCounter: integer;
+	signal peakFound: std_logic;
 
 ----------------------------------------------------------------
 begin
@@ -70,7 +72,7 @@ begin
 		end if;
 	end process;
 
-	state_order: process(curState, start, dataArrived, endRequest, conversionComplete, switch)
+	state_order: process(curState, start, dataArrived, endRequest, conversionComplete, switch, peakFound)
 	begin
 		case curState is
 		when init => 					-- Waiting for the start signal
@@ -101,7 +103,7 @@ begin
 			if start = '0' then
 				nextState <= init;
 			elsif endRequest = '1' then
-				nextState <= assignPeak;
+				nextState <= finalByte;
 			elsif switch ='1' then
 				nextState <= sendBytesSwitch;
 			else
@@ -111,10 +113,24 @@ begin
 			if start = '0' then
 				nextState <= init;
 			elsif endRequest = '1' then
-				nextState <= assignPeak;
+				nextState <= finalByte;
 			else
 				nextState <= sendBytes;
 			end if;
+		when finalByte =>
+		  if start = '0' then
+		    nextState <= init;
+		  else
+		    nextState <= checkPeak;
+		  end if;
+		when checkPeak => --Wait for the peak checker to go through the entire shift register
+		  if start = '0' then
+		    nextState <= init;
+		  elsif peakFound = '1' then
+		    nextState <= assignPeak;
+		  else
+		    nextState <= checkPeak;
+		  end if;
 		when assignPeak =>				 		-- Find the peak value and assign it and the 3 bytes before and after into dataResults. 
 			if conversionComplete = '1' then	--Also the assigning of maxIndex occurs in this state
 				nextState <= sendPeak;
@@ -158,6 +174,9 @@ begin
 			dataReady <= '1';
 			countEn <= '1';
 			toggle <= '1';
+		end if;
+		if curState = finalByte then -- to send the final byte
+		  dataReady <= '1';
 		end if;
 		if curState = assignPeak then --Starts the allocation of bytes into dataResults and and converts the peak index into BCD format
 			resultsValid <= '1';
@@ -264,14 +283,14 @@ begin
 				shiftRegister(6) <= "10000000";
 				shiftCounter := 0;
 			end if;
-			if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +3)) then
+			if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +4)) then
 				shiftRegister(1) <= shiftRegister(0);
 				shiftRegister(2) <= shiftRegister(1);
 				shiftRegister(3) <= shiftRegister(2);
 				shiftRegister(4) <= shiftRegister(3);
 				shiftRegister(5) <= shiftRegister(4);
 				shiftRegister(6) <= shiftRegister(5);
-				if shiftCounter >= totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
+				if shiftCounter > totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
 					shiftRegister(0) <= "10000000";
 				else
 					shiftRegister(0) <= data;  --Otherwise insert data from the generator
@@ -305,13 +324,13 @@ begin
 	send_byte:process(clk, dataArrived, reset, shiftRegister, N, totalSum) -- Sends the bytes from the global data array to command processor
 	begin
     if reset = '1' then
-		byte <= "00000000";
+		  byte <= "00000000";
     end if;
-		if rising_edge(clk) and dataArrived = '1' and N > 0 then
+	if rising_edge(clk) then
+		if (dataArrived = '1' or N = totalSum) and N > 0 then
 			byte <= shiftRegister(0);
-		elsif rising_edge(clk) and N = totalSum and N>0 then
-			byte <= shiftRegister(0);
-		end if;	
+		end if;
+	end if;
 	end process; 
   
 	global_array_counter: process(CLK, reset, resetCounter, ctrl_2Detection) --Now counts the number of bytes coming from the generator 
@@ -355,6 +374,7 @@ begin
 		if reset = '1' then
 			peakIndex <= 0;
 			valueFromArray := "10000000"; -- largest negative number
+			peakCounter <= 0;
 			rollingPeakBin <= "10000000"; 
 			dataResults(0) <= "10000000";
 			dataResults(1) <= "10000000";
@@ -367,6 +387,7 @@ begin
 			if resetCounter = '1' then --Counter reset
 				peakIndex <= 0;
 				valueFromArray := "10000000"; 
+				peakCounter <= 0;
 				rollingPeakBin <= "10000000";
 				dataResults(0) <= "10000000";
 				dataResults(1) <= "10000000";
@@ -376,11 +397,11 @@ begin
 				dataResults(5) <= "10000000";
 				dataResults(6) <= "10000000";
 			end if;  
-			if N > 0 and beginRequest = '1' then
+			if N > 3 and (beginRequest = '1' or peakCounter < totalSum + 3) then
 				valueFromArray := shiftRegister(3); 				--Stores the the data bit in a variable which can be converted to signed
 				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(shiftRegister(3));
-					peakIndex <= N-4;
+					peakIndex <= peakCounter;
 					dataResults(0) <= shiftRegister(0);
 					dataResults(1) <= shiftRegister(1);
 					dataResults(2) <= shiftRegister(2);
@@ -389,7 +410,16 @@ begin
 					dataResults(5) <= shiftRegister(5);
 					dataResults(6) <= shiftRegister(6);					--Set the index number of the peak value
 				end if;
+				peakCounter <= peakCounter +1;
 			end if;
+		end if;
+	end process;
+	
+	peak_found: process(peakCounter, totalSum)
+	begin
+		peakFound <= '0';
+		if peakCounter >= (totalSum) then
+			peakFound <= '1';
 		end if;
 	end process;
 	
