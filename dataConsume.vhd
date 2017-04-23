@@ -31,7 +31,7 @@ end;
 
 -------------------- Architecture  ---------------------------
 architecture dataConsume_Arch of dataConsume is
-	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, dataRequestSwitch, sendBytesSwitch, checkPeak, finalByte); --States go here
+	type state_type is (init, dataRequest, sendBytes, assignPeak, sendPeak, checkPeak, finalByte); --States go here
 	--Signals
 	signal curState, nextState: state_type; -- Used for state machine control
 	signal numWordsReg: BCD_ARRAY_TYPE(2 downto 0); --Stores numWords in a register
@@ -53,8 +53,9 @@ architecture dataConsume_Arch of dataConsume is
 	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
 	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
 	signal shiftRegister: char_array_type(0 to 6);
-	signal peakCounter: integer;
+	signal peakCounter: integer := 0;
 	signal peakFound: std_logic;
+
 
 ----------------------------------------------------------------
 begin
@@ -72,7 +73,7 @@ begin
 		end if;
 	end process;
 
-	state_order: process(curState, start, dataArrived, endRequest, conversionComplete, switch, peakFound)
+	state_order: process(curState, start, dataArrived, endRequest, conversionComplete, peakFound)
 	begin
 		case curState is
 		when init => 					-- Waiting for the start signal
@@ -85,31 +86,11 @@ begin
 			if start = '0' then
 				nextState <= init;
 			elsif dataArrived = '1' then
-				nextState <= sendBytesSwitch;
-			elsif switch ='1' then
-				nextState <= dataRequestSwitch;
-			else
-				nextState <= dataRequest;
-			end if;
-		when dataRequestSwitch =>		--Similar to dataRequest but contains the toggle
-			if start = '0' then
-				nextState <= init;
-			elsif dataArrived = '1' then
 				nextState <= sendBytes;
 			else
 				nextState <= dataRequest;
 			end if;
 		when sendBytes => 				--Start sending the bytes from the global array
-			if start = '0' then
-				nextState <= init;
-			elsif endRequest = '1' then
-				nextState <= finalByte;
-			elsif switch ='1' then
-				nextState <= sendBytesSwitch;
-			else
-				nextState <= sendBytes;
-			end if;
-		when sendBytesSwitch =>			--Similar to sendBytes but contains the a toggle
 			if start = '0' then
 				nextState <= init;
 			elsif endRequest = '1' then
@@ -152,28 +133,15 @@ begin
 		beginRequest <= '0';
 		resultsValid <= '0';
 		resetCounter <= '0';
-		toggle <= '0';
 		countEn <= '0';
 		if curState = dataRequest then
 			beginRequest <= '1';	--Tells the data processor to start requesting data from the generator
-			toggle <= '0';
 			countEn <= '1';
 		end if;
 		if curState = sendBytes then
 			dataReady <= '1';		--while requesting data, the data will also start sending indivdual bytes to the command processor
 			beginRequest <= '1';
 			countEn <= '1';
-		end if;
-		if curState = dataRequestSwitch then --Assert toggle
-			beginRequest <= '1';
-			countEn <= '1';
-			toggle <= '1';
-		end if; 
-		if curState = sendBytesSwitch then --Assert toggle
-			beginRequest <='1';
-			dataReady <= '1';
-			countEn <= '1';
-			toggle <= '1';
 		end if;
 		if curState = finalByte then -- to send the final byte
 		  dataReady <= '1';
@@ -222,11 +190,9 @@ begin
 	
 	ctrl_out_switching:process(toggle) --When going into the "switch" states, ctrlOut changes to 1.
 	begin
-		ctrlOut <= '0';
-		if toggle = '1' then
-		   ctrlOut <= '1';
-		end if;
+		ctrlOut <= toggle;
 	end process;
+
 
 	ctrlOut_counter : process(CLK, countEN, reset, resetCounter, totalSum)  --Counts the number of times a transistion has occured on the ctrlOut line.
 	begin
@@ -243,16 +209,16 @@ begin
 		end if;
 	end process;
 	
-	request_data:process(countInt, totalSum, beginRequest) -- signals to the state machine when to transistion to the switch states
-	begin                                
-		switch <= '0';
-		if countInt >= (totalSum) then
-			switch <= '0';
-		elsif beginRequest = '1' and countInt < totalSum then
-			switch <= '1';
-		end if;
+	switching:process(clk, reset, beginRequest, countInt, totalSum)
+	begin
+	  if reset = '1' then
+	    toggle <= '0';
+	  elsif rising_edge(clk) then
+	    if beginRequest = '1' and countInt < totalSum then
+	      toggle <= not toggle;
+	    end if;
+	  end if;
 	end process;
-
 	
 
 -----------------------------------------------------------------------------
@@ -290,7 +256,7 @@ begin
 				shiftRegister(4) <= shiftRegister(3);
 				shiftRegister(5) <= shiftRegister(4);
 				shiftRegister(6) <= shiftRegister(5);
-				if shiftCounter > totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
+				if shiftCounter >= totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
 					shiftRegister(0) <= "10000000";
 				else
 					shiftRegister(0) <= data;  --Otherwise insert data from the generator
@@ -396,8 +362,7 @@ begin
 				dataResults(4) <= "10000000";
 				dataResults(5) <= "10000000";
 				dataResults(6) <= "10000000";
-			end if;  
-			if N > 3 and (beginRequest = '1' or peakCounter < totalSum + 3) then
+			elsif N > 3 and (beginRequest = '1' or peakCounter < totalSum + 3) then
 				valueFromArray := shiftRegister(3); 				--Stores the the data bit in a variable which can be converted to signed
 				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(shiftRegister(3));
