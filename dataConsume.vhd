@@ -306,7 +306,7 @@ begin
 		elsif rising_edge(clk) then
 			if resetCounter = '1' then
 				N <= 0;
-			elsif N < totalSum and dataArrived = '1' and ctrl_2Detection = '1' then
+			elsif N < totalSum and ctrl_2Detection = '1' then
 				N <= N + 1;
 			else
 				N <= N;
@@ -316,13 +316,13 @@ begin
 	
 	ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
 	
-	global_data_array: process(beginRequest, N, ctrl_2Detection, totalSum)  -- Controls the allocation of bytes into the global data array
+	global_data_array: process(beginRequest, N, totalSum)  -- Controls the allocation of bytes into the global data array
 	begin
 		dataArrived <= '0';
 		endRequest <= '0';
 		if N >= totalSum and N > 0 then
 			endRequest <= '1';
-		elsif beginRequest = '1' and ctrl_2Detection = '1' then
+		elsif beginRequest = '1' and (N > 0) then
 			dataArrived <= '1';
 		else
 			NULL;
