@@ -39,7 +39,6 @@ architecture dataConsume_Arch of dataConsume is
 	signal N: integer := 0; --A counter for the number of bytes that has been receieved
 	signal resetCounter: std_logic; -- A synchronous reset signal that resets counters and the peak byte
 	signal beginRequest, endRequest: std_logic; --Tells the processor to stop and start requesting data from the generator
-	--signal totalDataArray : CHAR_ARRAY_TYPE(0 to 999); --Stores every byte recived
 	signal rollingPeakBin : signed(7 downto 0) := "10000000"; --Peak byte in signed binary
 	signal peakIndex: integer := 0; --Index of peak byte in integer form
 	signal ctrl_2Delayed, ctrl_2Detection: std_logic; --Ctrl_2 detection signals (ctrl_2 is now ctrlIn)
@@ -47,17 +46,16 @@ architecture dataConsume_Arch of dataConsume is
 	signal dataArrived: std_logic; -- Checks that data has started to be allocated into the global array
 	signal conversionComplete: std_logic; --Checks that peakIndex has been converted into a bcd format
 	signal toggle: std_logic; -- Used for toggling ctrlOut between 1 and 0
-	signal switch: std_logic; -- Used to switch between states that alters toggle
 	signal countEn: std_logic; --Enables the count for number of switches
 	signal countInt: integer := 0; --Counts the number of switches (requests)
 	signal count100, count10, count1: unsigned(3 downto 0); -- For converting integer into bcd
 	signal flag100,flag10,flag1: std_logic; --Checks for the conversion of integers into bcd
-	signal shiftRegister: char_array_type(0 to 6);
-	signal peakCounter: integer := 0;
-	signal peakFound: std_logic;
-
+	signal shiftRegister: char_array_type(0 to 6); --A shift register to store incoming bytes
+	signal peakCounter: integer := 0; --Checks how many bytes have been check for the peak value
+	signal peakFound: std_logic; --Signals all the bytes have been checked (i.e. the final peak has been found)
 
 ----------------------------------------------------------------
+
 begin
 
 ----------- Processes handling the state machine --------------
@@ -188,7 +186,7 @@ begin
 
 ---------- Processes handling the handshaking protocol  ------------------
 	
-	ctrl_out_switching:process(toggle) --When going into the "switch" states, ctrlOut changes to 1.
+	ctrl_out_switching:process(toggle) --CtrlOut is set to the current value of toggle (either 0 or 1)
 	begin
 		ctrlOut <= toggle;
 	end process;
@@ -209,7 +207,7 @@ begin
 		end if;
 	end process;
 	
-	switching:process(clk, reset, beginRequest, countInt, totalSum)
+	switching:process(clk, reset, beginRequest, countInt, totalSum) --Alternates toggle between 0 and 1 on each rising clock edge
 	begin
 	  if reset = '1' then
 	    toggle <= '0';
@@ -227,7 +225,7 @@ begin
 
   --Handles the allocation of bytes into the data array as well as shifting the register along
   shift_register_allocate:process(clk, reset, shiftRegister, Data, resetCounter, totalSum)
-	variable shiftCounter : integer;
+	variable shiftCounter : integer; --A counter for keeping track of the number of times the shift register has moved data
 	begin
 		if reset = '1' then
 			shiftRegister(0) <= "10000000";
@@ -249,7 +247,7 @@ begin
 				shiftRegister(6) <= "10000000";
 				shiftCounter := 0;
 			end if;
-			if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +4)) then
+			if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +4)) then --The shift register shifts for so that all bytes reach shiftRegister(3)
 				shiftRegister(1) <= shiftRegister(0);
 				shiftRegister(2) <= shiftRegister(1);
 				shiftRegister(3) <= shiftRegister(2);
@@ -293,7 +291,7 @@ begin
 		  byte <= "00000000";
     end if;
 	if rising_edge(clk) then
-		if (dataArrived = '1' or N = totalSum) and N > 0 then
+		if (dataArrived = '1' or N = totalSum) and N > 0 then --Allocates bytes from the shift register to the command processor
 			byte <= shiftRegister(0);
 		end if;
 	end if;
@@ -314,20 +312,23 @@ begin
 		end if;
 	end process;
 	
-	ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
+	data_generator_detector:process(ctrlIn, ctrl_2Delayed)
+	begin
+		ctrl_2Detection <= ctrlIn xor ctrl_2Delayed; --Checks that the input and its registered value are different which corresponds to an edge case
+	end process;
 	
-	global_data_array: process(beginRequest, N, totalSum)  -- Controls the allocation of bytes into the global data array
+	global_data_array: process(beginRequest, N, totalSum)  -- Controls when the correct number of bytes have been received
 	begin
 		dataArrived <= '0';
 		endRequest <= '0';
-		if N >= totalSum and N > 0 then
+		if N >= totalSum and N > 0 then --When the requested number of bytes have arrived
 			endRequest <= '1';
-		elsif beginRequest = '1' and (N > 0) then
+		elsif beginRequest = '1' and (N > 0) then --When the first bytes has arrived
 			dataArrived <= '1';
 		else
 			NULL;
 		end if;
-	end process; --end data array
+	end process;
 	
 -------------------------------------------------------------------------------
 	
@@ -367,20 +368,20 @@ begin
 				if signed(valueFromArray) >=(rollingPeakBin) then 	--Compares the saved variable to the current peak value
 					rollingPeakBin <= signed(shiftRegister(3));
 					peakIndex <= peakCounter;
-					dataResults(0) <= shiftRegister(0);
+					dataResults(0) <= shiftRegister(0);  --If so, dataResults takes the values from the shift register
 					dataResults(1) <= shiftRegister(1);
 					dataResults(2) <= shiftRegister(2);
 					dataResults(3) <= shiftRegister(3);
 					dataResults(4) <= shiftRegister(4);
 					dataResults(5) <= shiftRegister(5);
-					dataResults(6) <= shiftRegister(6);					--Set the index number of the peak value
+					dataResults(6) <= shiftRegister(6);					
 				end if;
 				peakCounter <= peakCounter +1;
 			end if;
 		end if;
 	end process;
 	
-	peak_found: process(peakCounter, totalSum)
+	peak_found: process(peakCounter, totalSum) --Process to check when all the bytes have been compared to the current peak
 	begin
 		peakFound <= '0';
 		if peakCounter >= (totalSum) then
