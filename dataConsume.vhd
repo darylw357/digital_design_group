@@ -53,6 +53,8 @@ architecture dataConsume_Arch of dataConsume is
 	signal shiftRegister: char_array_type(0 to 6); --A shift register to store incoming bytes
 	signal peakCounter: integer := 0; --Checks how many bytes have been check for the peak value
 	signal peakFound: std_logic; --Signals all the bytes have been checked (i.e. the final peak has been found)
+	signal shiftEn: std_logic;
+	signal shiftCounter: integer := 0; --A counter for keeping track of the number of times the shift register has moved data
 
 ----------------------------------------------------------------
 
@@ -157,7 +159,7 @@ begin
 
 -------   Processes handling numWords_BCD  --------------
 
-	register_numWords:process(start, clk, reset) -- Registers the data from numWords when Start = 1
+	register_numWords:process(start, clk, reset, numWords_bcd) -- Registers the data from numWords when Start = 1
 	begin
 		if reset = '1' then
 			numWordsReg <= (X"0",X"0",X"0"); 
@@ -223,9 +225,16 @@ begin
 
 --------------------------  Shift Register   --------------------------------
 
-  --Handles the allocation of bytes into the data array as well as shifting the register along
-  shift_register_allocate:process(clk, reset, shiftRegister, Data, resetCounter, totalSum)
-	variable shiftCounter : integer; --A counter for keeping track of the number of times the shift register has moved data
+	shift_control:process(totalSum, ctrl_2Detection, shiftCounter)
+	begin
+		shiftEn <= '0';
+		if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +4)) then
+			shiftEn <= '1';
+		end if;
+	end process;
+	
+	--Handles the allocation of bytes into the data array as well as shifting the register along
+	shift_register_allocate:process(clk, reset, shiftRegister, Data, resetCounter,shiftEn)
 	begin
 		if reset = '1' then
 			shiftRegister(0) <= "10000000";
@@ -235,7 +244,7 @@ begin
 			shiftRegister(4) <= "10000000";
 			shiftRegister(5) <= "10000000";
 			shiftRegister(6) <= "10000000";
-			shiftCounter := 0;
+			shiftCounter <= 0;
 		elsif rising_edge(clk) then
 			if resetCounter = '1' then
 				shiftRegister(0) <= "10000000";
@@ -245,21 +254,22 @@ begin
 				shiftRegister(4) <= "10000000";
 				shiftRegister(5) <= "10000000";
 				shiftRegister(6) <= "10000000";
-				shiftCounter := 0;
+				shiftCounter <= 0;
 			end if;
-			if ctrl_2Detection = '1' or (shiftCounter > 1 and shiftCounter < (totalSum +4)) then --The shift register shifts for so that all bytes reach shiftRegister(3)
+			if shiftEn = '1' then --The shift register shifts for so that all bytes reach shiftRegister(3)
 				shiftRegister(1) <= shiftRegister(0);
 				shiftRegister(2) <= shiftRegister(1);
 				shiftRegister(3) <= shiftRegister(2);
 				shiftRegister(4) <= shiftRegister(3);
 				shiftRegister(5) <= shiftRegister(4);
 				shiftRegister(6) <= shiftRegister(5);
-				if shiftCounter >= totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
-					shiftRegister(0) <= "10000000";
-				else
-					shiftRegister(0) <= data;  --Otherwise insert data from the generator
-				end if;
-				shiftCounter := shiftCounter + 1;
+				shiftRegister(0) <= data;
+				-- if shiftCounter >= totalSum then  -- If the peak is near the end of the sequence, the shift register inserts -128
+					-- shiftRegister(0) <= "10000000";
+				-- else
+					-- shiftRegister(0) <= data;  --Otherwise insert data from the generator
+				-- end if;
+				shiftCounter <= shiftCounter + 1;
 			end if;
 		else
 			shiftRegister(1) <= shiftRegister(1);
